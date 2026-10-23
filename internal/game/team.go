@@ -116,13 +116,19 @@ func (e *Engine) Shuffle() error {
 	return nil
 }
 
-// smallestTeam is the team with the fewest players in the roster; ties go
-// to the earlier lane.
-func (e *Engine) smallestTeam() Team {
+// teamSizes counts the roster per team.
+func (e *Engine) teamSizes() map[Team]int {
 	n := make(map[Team]int, len(Teams))
 	for _, p := range e.players {
 		n[p.Team]++
 	}
+	return n
+}
+
+// smallestTeam is the team with the fewest players in the roster; ties go
+// to the earlier lane.
+func (e *Engine) smallestTeam() Team {
+	n := e.teamSizes()
 	best := Teams[0]
 	for _, t := range Teams[1:] {
 		if n[t] < n[best] {
@@ -130,4 +136,43 @@ func (e *Engine) smallestTeam() Team {
 		}
 	}
 	return best
+}
+
+// largestTeam is the team with the most players in the roster; ties go to
+// the earlier lane.
+func (e *Engine) largestTeam() Team {
+	n := e.teamSizes()
+	best := Teams[0]
+	for _, t := range Teams[1:] {
+		if n[t] > n[best] {
+			best = t
+		}
+	}
+	return best
+}
+
+// rebalance moves players, the latest joiner of the largest team each
+// time, to the smallest team until sizes are within 1. It returns the
+// players moved, in roster order.
+func (e *Engine) rebalance() []*entry {
+	var moved []*entry
+	for {
+		from, to := e.largestTeam(), e.smallestTeam()
+		n := e.teamSizes()
+		if n[from]-n[to] <= 1 {
+			break
+		}
+		var last *entry
+		for _, p := range e.players {
+			if p.Team == from && (last == nil || p.seq > last.seq) {
+				last = p
+			}
+		}
+		last.Team = to
+		if !slices.Contains(moved, last) {
+			moved = append(moved, last)
+		}
+	}
+	slices.SortFunc(moved, func(a, b *entry) int { return slices.Index(e.players, a) - slices.Index(e.players, b) })
+	return moved
 }

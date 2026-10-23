@@ -61,17 +61,27 @@ func (e *Engine) Seen(id string) {
 	}
 }
 
-// Kick removes player id from the roster, mid-round included, and reports
-// whether it was there.
-func (e *Engine) Kick(id string) bool {
-	e.sync()
-	i := slices.IndexFunc(e.players, func(p *entry) bool { return p.ID == id })
-	if i < 0 {
+// Kick removes the given players from the roster, mid-round included, and
+// returns the ids that were there. In the lobby the remaining roster is
+// then rebalanced so team sizes are within 1 again; moved are the players
+// whose team changed. Mid-round, teams are left as they are.
+func (e *Engine) Kick(ids ...string) (kicked []string, moved []Player) {
+	now := e.sync()
+	e.players = slices.DeleteFunc(e.players, func(p *entry) bool {
+		if slices.Contains(ids, p.ID) {
+			kicked = append(kicked, p.ID)
+			return true
+		}
 		return false
+	})
+	e.standings = slices.DeleteFunc(e.standings, func(s Standing) bool { return slices.Contains(kicked, s.ID) })
+	if len(kicked) == 0 || e.phase != PhaseLobby {
+		return kicked, nil
 	}
-	e.players = slices.Delete(e.players, i, i+1)
-	e.standings = slices.DeleteFunc(e.standings, func(s Standing) bool { return s.ID == id })
-	return true
+	for _, p := range e.rebalance() {
+		moved = append(moved, e.view(p, now))
+	}
+	return kicked, moved
 }
 
 // Result returns player id's final standing and the number of players

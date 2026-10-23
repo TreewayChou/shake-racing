@@ -61,11 +61,14 @@ func TestReshuffleRebalancesAndTellsEveryPhone(t *testing.T) {
 		phones[id] = p
 		ids = append(ids, id)
 	}
-	// Players 0, 4 and 8 went to red: kicking them leaves red empty.
+	// Players 0, 4 and 8 went to red: kicking them mid-round leaves red
+	// empty, and nothing rebalances until the reshuffle.
+	host.Start()
 	for _, i := range []int{0, 4, 8} {
 		host.Kick(ids[i])
 		delete(phones, ids[i])
 	}
+	host.Reset()
 	if n := teamSizes(host.NextSnapshot(h)); n["red"] != 0 {
 		t.Fatalf("after kicks red has %d, want 0", n["red"])
 	}
@@ -85,6 +88,98 @@ func TestReshuffleRebalancesAndTellsEveryPhone(t *testing.T) {
 			t.Errorf("%s: phone told %q, snapshot says %q", p.Name, got, p.Team)
 		}
 	}
+}
+
+// assertBalanced fails unless team sizes in s are within 1 and every
+// phone told of a new team agrees with the snapshot.
+func assertBalanced(t *testing.T, s servertest.Snapshot, told map[string]string) {
+	t.Helper()
+	n := teamSizes(s)
+	lo, hi := 1<<30, 0
+	for _, l := range lanes {
+		lo, hi = min(lo, n[l]), max(hi, n[l])
+	}
+	if hi-lo > 1 {
+		t.Errorf("team sizes = %v, want within 1", n)
+	}
+	for _, p := range s.Players {
+		if team, ok := told[p.ID]; ok && team != p.Team {
+			t.Errorf("%s: phone told %q, snapshot says %q", p.Name, team, p.Team)
+		}
+	}
+}
+
+// expectTeams reads each phone's queued messages up to an echo barrier and
+// returns the last team each was told, by player id.
+func expectTeams(t *testing.T, phones map[string]*servertest.Phone) map[string]string {
+	t.Helper()
+	told := map[string]string{}
+	for id, p := range phones {
+		p.Send(map[string]any{"type": "echo", "id": -1})
+		for m := p.Recv(); m.Type != "echo"; m = p.Recv() {
+			if m.Type == "team" {
+				var tm struct {
+					Team string `json:"team"`
+				}
+				m.Decode(t, &tm)
+				told[id] = tm.Team
+			}
+		}
+	}
+	return told
+}
+
+func TestKickInTheLobbyRebalancesTeamsAndTellsMovedPhones(t *testing.T) {
+	h := servertest.Start(t)
+	host := h.Host()
+	phones := map[string]*servertest.Phone{}
+	var ids []string
+	for i := range 8 {
+		p := h.Phone()
+		id := p.Join(fmt.Sprintf("p%d", i)).PlayerID
+		phones[id] = p
+		ids = append(ids, id)
+	}
+	// p0 and p4 are red: kicking both would leave red empty.
+	for _, i := range []int{0, 4} {
+		host.Kick(ids[i])
+		phones[ids[i]].ExpectKicked()
+		delete(phones, ids[i])
+	}
+
+	s := host.NextSnapshot(h)
+	told := expectTeams(t, phones)
+	assertBalanced(t, s, told)
+	if len(told) == 0 {
+		t.Error("no phone was told of a new team")
+	}
+}
+
+func TestClearingBotsInTheLobbyRebalancesTeams(t *testing.T) {
+	h := servertest.Start(t)
+	host := h.Host()
+	phones := map[string]*servertest.Phone{}
+	var ids []string
+	for i := range 8 {
+		p := h.Phone()
+		id := p.Join(fmt.Sprintf("p%d", i)).PlayerID
+		phones[id] = p
+		ids = append(ids, id)
+	}
+	host.Bots("add")
+	host.WaitPlayers(h, 18)
+	// Kicked mid-round, red's p0 and p4 are not replaced; back in the lobby
+	// red is down to its bots.
+	host.Start()
+	for _, i := range []int{0, 4} {
+		host.Kick(ids[i])
+		delete(phones, ids[i])
+	}
+	host.Reset()
+
+	host.Bots("clear")
+	s := host.WaitPlayers(h, 6)
+	assertBalanced(t, s, expectTeams(t, phones))
 }
 
 // startTeamRound joins p0…p(n-1) (so p0 red, p1 blue, p2 green, p3 yellow,

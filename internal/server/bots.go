@@ -55,14 +55,16 @@ func (s *Server) botsLocked(data []byte) {
 }
 
 // clearBotsLocked removes every bot from the roster and disconnects it.
-// Real players are untouched.
+// Real players stay, though in the lobby they may move team to rebalance.
 func (s *Server) clearBotsLocked() {
+	var ids []string
 	for ph := range s.botPhones {
 		if ph.id != "" {
-			s.kickLocked(ph.id)
+			ids = append(ids, ph.id)
 		}
 		ph.c.cancel() // a join already read is refused in servePhone
 	}
+	s.kickLocked(ids...)
 	s.bots.Clear()
 }
 

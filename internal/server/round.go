@@ -188,11 +188,7 @@ func (s *Server) hostMessage(typ string, data []byte) {
 		s.sendPhonesLocked(mustJSON(newConfigMsg(s.engine.Config())))
 	case "shuffle":
 		if s.engine.Shuffle() == nil {
-			for ph := range s.phones {
-				if p, ok := s.engine.Player(ph.id); ok {
-					ph.c.send(mustJSON(teamMsg{Type: "team", Team: string(p.Team)}))
-				}
-			}
+			s.sendTeamsLocked(s.engine.Snapshot().Players)
 		}
 	case "again":
 		if s.engine.Again() == nil {

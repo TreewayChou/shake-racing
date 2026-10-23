@@ -1,6 +1,8 @@
 package server
 
 import (
+	"slices"
+
 	"racing/internal/game"
 )
 
@@ -56,16 +58,29 @@ func (s *Server) joinLocked(ph *phone, m joinMsg) error {
 	return nil
 }
 
-// kickLocked removes player id and tells its phone.
-func (s *Server) kickLocked(id string) {
-	if !s.engine.Kick(id) {
-		return
+// kickLocked removes the given players and tells their phones; phones of
+// players moved by the lobby rebalance are told their new team.
+func (s *Server) kickLocked(ids ...string) {
+	kicked, moved := s.engine.Kick(ids...)
+	for _, id := range kicked {
+		delete(s.clocks, id)
 	}
-	delete(s.clocks, id)
 	for ph := range s.phones {
-		if ph.id == id {
+		if slices.Contains(kicked, ph.id) {
 			ph.c.send(mustJSON(signalMsg{Type: "kicked"}))
 			delete(s.phones, ph)
+		}
+	}
+	s.sendTeamsLocked(moved)
+}
+
+// sendTeamsLocked tells each player's phone its team.
+func (s *Server) sendTeamsLocked(players []game.Player) {
+	for ph := range s.phones {
+		for _, p := range players {
+			if p.ID == ph.id {
+				ph.c.send(mustJSON(teamMsg{Type: "team", Team: string(p.Team)}))
+			}
 		}
 	}
 }
