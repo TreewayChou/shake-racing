@@ -16,6 +16,20 @@ import (
 // MaxNameLen is the maximum nickname length in characters (runes).
 const MaxNameLen = 8
 
+// Detector is the phone shake-detector tuning. It is defined here, not in
+// the page, so it can be tuned after real-phone tests; the server injects
+// it into the phone page.
+type Detector struct {
+	Accel      float64 // primary: |acceleration| threshold in m/s²
+	Delta      float64 // fallback: |Δ|accelerationIncludingGravity|| threshold
+	Rearm      float64 // re-arm once the signal drops below Rearm × threshold
+	CooldownMs int     // minimum gap between counted shakes
+}
+
+// DefaultDetector is the starting tuning: 80 ms cooldown caps every phone
+// at 12.5 shakes/s.
+var DefaultDetector = Detector{Accel: 15, Delta: 12, Rearm: 0.6, CooldownMs: 80}
+
 // ErrInvalidName is returned when a trimmed nickname is empty or too long.
 var ErrInvalidName = errors.New("game: nickname must be 1-8 characters")
 
@@ -59,6 +73,21 @@ func (e *Engine) Join(name string) (Player, error) {
 	p := &Player{ID: newID(), Name: name}
 	e.players = append(e.players, p)
 	return *p, nil
+}
+
+// Warmup reports whether a lobby warm-up shake from player id should be
+// shown on the host: the player must be in the roster and the room in the
+// lobby.
+func (e *Engine) Warmup(id string) bool {
+	if e.phase != PhaseLobby {
+		return false
+	}
+	for _, p := range e.players {
+		if p.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // Snapshot returns the current room state.
