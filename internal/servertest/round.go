@@ -124,6 +124,11 @@ type Result struct {
 	Players     int   `json:"players"`
 	Finished    bool  `json:"finished"`  // race: reached the target
 	ElapsedMs   int64 `json:"elapsedMs"` // race: the phone's finish time
+
+	// Team modes only.
+	Team     string  `json:"team"`
+	TeamRank int     `json:"teamRank"` // 1 = the winning team
+	TeamAvg  float64 `json:"teamAvg"`
 }
 
 // ExpectResult waits for the phone's result.

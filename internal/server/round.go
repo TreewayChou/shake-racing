@@ -183,6 +183,14 @@ func (s *Server) hostMessage(typ string, data []byte) {
 	case "reset":
 		s.engine.Reset()
 		s.sendPhonesLocked(mustJSON(newConfigMsg(s.engine.Config())))
+	case "shuffle":
+		if s.engine.Shuffle() == nil {
+			for ph := range s.phones {
+				if p, ok := s.engine.Player(ph.id); ok {
+					ph.c.send(mustJSON(teamMsg{Type: "team", Team: string(p.Team)}))
+				}
+			}
+		}
 	case "again":
 		if s.engine.Again() == nil {
 			s.sendPhonesLocked(mustJSON(newConfigMsg(s.engine.Config())))
@@ -216,7 +224,7 @@ func (s *Server) dispatchLocked() {
 			}
 			for ph := range s.phones {
 				if st, ok := byID[ph.id]; ok {
-					ph.c.send(mustJSON(newResultMsg(st, len(ev.Standings))))
+					ph.c.send(mustJSON(newResultMsg(st, len(ev.Standings), ev.Teams)))
 				}
 			}
 		}
@@ -246,10 +254,14 @@ func (s *Server) snapshotLocked() []byte {
 		msg.EndAt = snap.Round.EndAt.UnixMilli()
 	}
 	for i, p := range snap.Players {
-		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name, Total: p.Total, Offline: p.Offline, Waiting: p.Waiting}.withFinish(p)
+		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name, Team: string(p.Team), Total: p.Total, Offline: p.Offline, Waiting: p.Waiting}.withFinish(p)
 	}
 	for i, st := range snap.Top {
-		msg.Top[i] = snapshotPlayer{ID: st.ID, Name: st.Name, Total: st.Total, Rank: st.Rank}.withFinish(st.Player)
+		msg.Top[i] = snapshotPlayer{ID: st.ID, Name: st.Name, Team: string(st.Team), Total: st.Total, Rank: st.Rank}.withFinish(st.Player)
+	}
+	msg.Teams = newTeamScores(snap.Teams)
+	if snap.MVP != nil {
+		msg.MVP = msg.Top[:len(snap.MVP)] // the MVP list is the head of the ranking
 	}
 	return mustJSON(msg)
 }

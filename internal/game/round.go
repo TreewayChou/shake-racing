@@ -70,7 +70,11 @@ type Event interface{ event() }
 type RoundEnded struct{}
 
 // RoundResults: the round is ranked. Standings cover every participant.
-type RoundResults struct{ Standings []Standing }
+// Teams are the final team scores in team modes, nil otherwise.
+type RoundResults struct {
+	Standings []Standing
+	Teams     []TeamScore
+}
 
 func (RoundEnded) event()   {}
 func (RoundResults) event() {}
@@ -91,10 +95,12 @@ type rules interface {
 
 func rulesFor(m Mode) rules {
 	switch m {
-	case IndividualTimed:
+	case IndividualTimed, TeamTimed:
 		return timedRules{}
 	case IndividualRace:
 		return raceRules{}
+	case TeamRace:
+		return teamRaceRules{}
 	}
 	panic("game: no rules for mode " + string(m))
 }
@@ -142,7 +148,8 @@ func (e *Engine) Start() (Round, error) {
 	e.phase = PhaseCountdown
 	e.rules = rulesFor(e.config.Mode)
 	e.round = Round{Config: e.config, StartAt: e.clock.Now().Add(StartLead)}
-	e.standings = nil
+	e.crossed = make(map[Team]int)
+	e.standings, e.teamResults = nil, nil
 	return e.round, nil
 }
 
@@ -173,7 +180,7 @@ func (e *Engine) Again() error {
 func (e *Engine) toLobby() {
 	e.phase = PhaseLobby
 	e.round = Round{}
-	e.standings = nil
+	e.standings, e.teamResults = nil, nil
 	for _, p := range e.players {
 		p.clearRound()
 		p.inRound = false
@@ -211,8 +218,8 @@ func (e *Engine) Progress(id string, rep Report) {
 	p.Total, p.reached = total, rep.Elapsed
 	if target > 0 && total == target {
 		p.Finished, p.Finish, p.finishedAt = true, rep.Elapsed, now
-		e.sync() // the finish may end the round
 	}
+	e.sync() // a finish, or a team average reaching the target, may end the round
 }
 
 // Events returns and clears the pending events.
@@ -234,6 +241,7 @@ func (e *Engine) sync() (now time.Time) {
 			}
 			e.phase = PhaseRacing
 		case PhaseRacing:
+			e.noteCrossings()
 			end, ok := e.rules.ended(e.round, now, e.participants())
 			if !ok {
 				return now
@@ -242,12 +250,16 @@ func (e *Engine) sync() (now time.Time) {
 			e.phase = PhaseGrace
 			e.events = append(e.events, RoundEnded{})
 		case PhaseGrace:
+			e.noteCrossings() // a late report may bring another team over the line
 			if now.Before(e.round.EndAt.Add(Grace)) {
 				return now
 			}
 			e.phase = PhaseResults
 			e.standings = e.ranking()
-			e.events = append(e.events, RoundResults{Standings: slices.Clone(e.standings)})
+			if e.config.Mode.Team() {
+				e.teamResults = teamScores(e.participants(), e.crossed)
+			}
+			e.events = append(e.events, RoundResults{Standings: slices.Clone(e.standings), Teams: slices.Clone(e.teamResults)})
 		default:
 			return now
 		}

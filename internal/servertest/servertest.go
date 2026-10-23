@@ -152,6 +152,7 @@ func (h *Harness) Phone() *Phone {
 type Welcome struct {
 	PlayerID  string   `json:"playerId"`
 	Name      string   `json:"name"` // as shown on the host, deduplicated
+	Team      string   `json:"team"` // red, blue, green or yellow: auto-balanced on join
 	Constants Detector `json:"constants"`
 }
 
@@ -215,6 +216,19 @@ type Snapshot struct {
 	GraceMs    int64            `json:"graceMs"`
 	Players    []SnapshotPlayer `json:"players"`
 	Top        []SnapshotPlayer `json:"top"` // live (or, in results, final) ranking, at most 15
+
+	// Team modes only.
+	Teams []TeamScore      `json:"teams"` // the four lanes in order red, blue, green, yellow
+	MVP   []SnapshotPlayer `json:"mvp"`   // individual Top 5 across all teams, live or final
+}
+
+// TeamScore is one team lane: score is the average shakes per member.
+type TeamScore struct {
+	Team    string  `json:"team"`
+	Members int     `json:"members"` // round participants (roster size in the lobby)
+	Total   int     `json:"total"`
+	Avg     float64 `json:"avg"`
+	Rank    int     `json:"rank"` // 1 = leading or winning; 0 for a team with nobody
 }
 
 // SnapshotPlayer is one roster entry in a snapshot.
@@ -223,6 +237,7 @@ type SnapshotPlayer struct {
 	Name  string `json:"name"`
 	Total int    `json:"total"`
 	Rank  int    `json:"rank,omitempty"` // set in top
+	Team  string `json:"team"`           // red, blue, green or yellow
 
 	Offline bool `json:"offline,omitempty"` // missed 2 heartbeats; still in the roster
 	Waiting bool `json:"waiting,omitempty"` // joined mid-round; races in the next one

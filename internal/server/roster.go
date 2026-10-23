@@ -25,7 +25,7 @@ func (s *Server) joinLocked(ph *phone, m joinMsg) error {
 	}
 	ph.id = p.ID
 	s.phones[ph] = struct{}{}
-	ph.c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID, Name: p.Name, Constants: newDetectorMsg(game.DefaultDetector)}))
+	ph.c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID, Name: p.Name, Team: string(p.Team), Constants: newDetectorMsg(game.DefaultDetector)}))
 	ph.c.send(mustJSON(newConfigMsg(s.engine.Config())))
 	s.startClockSyncLocked(ph)
 	ph.samples = s.clocks[p.ID] // a reconnect keeps its clock estimate
@@ -50,7 +50,7 @@ func (s *Server) joinLocked(ph *phone, m joinMsg) error {
 		}
 	case game.PhaseResults:
 		if st, n, ok := s.engine.Result(p.ID); ok {
-			ph.c.send(mustJSON(newResultMsg(st, n)))
+			ph.c.send(mustJSON(newResultMsg(st, n, snap.Teams)))
 		}
 	}
 	return nil

@@ -57,6 +57,11 @@ type resultMsg struct {
 	Players     int    `json:"players"`             // participants ranked
 	Finished    bool   `json:"finished,omitempty"`  // race: reached the target
 	ElapsedMs   int64  `json:"elapsedMs,omitempty"` // race: phone-measured finish time
+
+	// Team modes: the player's team and its final place and average.
+	Team     string  `json:"team,omitempty"`
+	TeamRank int     `json:"teamRank,omitempty"`
+	TeamAvg  float64 `json:"teamAvg,omitempty"`
 }
 
 // pingMsg is a heartbeat and clock-sync probe.
@@ -70,7 +75,14 @@ type welcomeMsg struct {
 	Type      string      `json:"type"` // "welcome"
 	PlayerID  string      `json:"playerId"`
 	Name      string      `json:"name"` // deduplicated; the kept name on a reconnect
+	Team      string      `json:"team"` // red, blue, green or yellow
 	Constants detectorMsg `json:"constants"`
+}
+
+// teamMsg tells a phone its new team after the host reshuffles.
+type teamMsg struct {
+	Type string `json:"type"` // "team"
+	Team string `json:"team"`
 }
 
 // detectorMsg is the shake-detector tuning, sent in welcome and injected
@@ -103,8 +115,11 @@ type modeOptions struct {
 }
 
 func newModeOptions(c game.Config) modeOptions {
-	if c.Mode == game.IndividualRace {
+	switch c.Mode {
+	case game.IndividualRace:
 		return modeOptions{Target: c.Target, TimeCapMs: c.TimeCap.Milliseconds()}
+	case game.TeamRace:
+		return modeOptions{Target: c.Target}
 	}
 	return modeOptions{DurationMs: c.Duration.Milliseconds()}
 }
@@ -166,6 +181,19 @@ type snapshotMsg struct {
 	GraceMs    int64            `json:"graceMs"`
 	Players    []snapshotPlayer `json:"players"`
 	Top        []snapshotPlayer `json:"top"` // ranked, at most game.TopN
+
+	// Team modes only.
+	Teams []teamScore      `json:"teams,omitempty"` // lanes in order red, blue, green, yellow
+	MVP   []snapshotPlayer `json:"mvp,omitempty"`   // individual Top 5, live or final
+}
+
+// teamScore is one team lane; its score is the average per member.
+type teamScore struct {
+	Team    string  `json:"team"`
+	Members int     `json:"members"`
+	Total   int     `json:"total"`
+	Avg     float64 `json:"avg"`
+	Rank    int     `json:"rank"` // 0 for a team with nobody
 }
 
 // warmupMsg is sent to hosts as soon as a lobby player warm-up shakes.
@@ -187,6 +215,7 @@ type snapshotPlayer struct {
 	Name  string `json:"name"`
 	Total int    `json:"total"`
 	Rank  int    `json:"rank,omitempty"`
+	Team  string `json:"team"`
 
 	Offline bool `json:"offline,omitempty"` // missed 2 heartbeats
 	Waiting bool `json:"waiting,omitempty"` // joined mid-round
@@ -201,10 +230,29 @@ func (sp snapshotPlayer) withFinish(p game.Player) snapshotPlayer {
 	return sp
 }
 
-// newResultMsg is a participant's final standing among n ranked.
-func newResultMsg(st game.Standing, n int) resultMsg {
-	return resultMsg{
+// newResultMsg is a participant's final standing among n ranked, with
+// their team's final score when teams (team modes) is non-nil.
+func newResultMsg(st game.Standing, n int, teams []game.TeamScore) resultMsg {
+	m := resultMsg{
 		Type: "result", Rank: st.Rank, TotalShakes: st.Total, Players: n,
 		Finished: st.Finished, ElapsedMs: st.Finish.Milliseconds(),
 	}
+	for _, ts := range teams {
+		if ts.Team == st.Team {
+			m.Team, m.TeamRank, m.TeamAvg = string(ts.Team), ts.Rank, ts.Avg
+		}
+	}
+	return m
+}
+
+// newTeamScores is the snapshot's team lanes; nil outside team modes.
+func newTeamScores(teams []game.TeamScore) []teamScore {
+	if teams == nil {
+		return nil
+	}
+	out := make([]teamScore, len(teams))
+	for i, ts := range teams {
+		out[i] = teamScore{Team: string(ts.Team), Members: ts.Members, Total: ts.Total, Avg: ts.Avg, Rank: ts.Rank}
+	}
+	return out
 }

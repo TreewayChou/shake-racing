@@ -17,7 +17,18 @@ const (
 	// IndividualRace: first to Target shakes; the round ends when the top
 	// TopN have finished, at TimeCap, or when the host ends it.
 	IndividualRace Mode = "individual-race"
+
+	// TeamTimed: as IndividualTimed, but teams win by average shakes per
+	// member.
+	TeamTimed Mode = "team-timed"
+
+	// TeamRace: racing ends the moment the first team's average reaches
+	// Target, or when the host ends it. There is no time cap.
+	TeamRace Mode = "team-race"
 )
+
+// Team reports whether m is a 分隊 mode, scored by team averages.
+func (m Mode) Team() bool { return m == TeamTimed || m == TeamRace }
 
 // Durations are the timed-mode round lengths the host can pick.
 var Durations = []time.Duration{15 * time.Second, 30 * time.Second, 45 * time.Second, 60 * time.Second}
@@ -48,7 +59,7 @@ var ErrWrongPhase = errors.New("game: not allowed in this phase")
 
 func (c Config) valid() bool {
 	switch c.Mode {
-	case IndividualTimed, IndividualRace:
+	case IndividualTimed, IndividualRace, TeamTimed, TeamRace:
 	default:
 		return false
 	}

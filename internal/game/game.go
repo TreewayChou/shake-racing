@@ -45,7 +45,8 @@ const (
 type Player struct {
 	ID    string
 	Name  string
-	Total int // shakes accepted this round
+	Team  Team // auto-balanced on join; kept across rounds until a reshuffle
+	Total int  // shakes accepted this round
 
 	// Race modes: Finished once Total reaches the target, at phone-measured
 	// Finish time since the synced start.
@@ -80,19 +81,26 @@ type Snapshot struct {
 	Round   Round // zero in the lobby
 	Players []Player
 	Top     []Standing // live leaderboard, final in results; at most TopN
+
+	// Team modes only: the four lanes (live, final in results) and the
+	// individual MVP Top 5 across all teams (nil in the lobby).
+	Teams []TeamScore
+	MVP   []Standing
 }
 
 // Engine holds all game state for the single room.
 type Engine struct {
-	clock     clock.Clock
-	phase     Phase
-	config    Config
-	round     Round // valid outside the lobby
-	rules     rules // the round's mode rules; valid outside the lobby
-	players   []*entry
-	joins     int
-	standings []Standing // final ranking, in results
-	events    []Event
+	clock       clock.Clock
+	phase       Phase
+	config      Config
+	round       Round // valid outside the lobby
+	rules       rules // the round's mode rules; valid outside the lobby
+	players     []*entry
+	joins       int
+	standings   []Standing   // final ranking, in results
+	teamResults []TeamScore  // final team scores, in results (team modes)
+	crossed     map[Team]int // team race: order in which teams reached the target
+	events      []Event
 }
 
 // New returns an engine in the lobby phase.
@@ -130,7 +138,7 @@ func (e *Engine) Join(name, id string) (Player, error) {
 		return Player{}, ErrFull
 	}
 	e.joins++
-	p := &entry{Player: Player{ID: newID(), Name: e.uniqueName(name)}, seq: e.joins, lastSeen: now}
+	p := &entry{Player: Player{ID: newID(), Name: e.uniqueName(name), Team: e.smallestTeam()}, seq: e.joins, lastSeen: now}
 	e.players = append(e.players, p)
 	return e.view(p, now), nil
 }
@@ -146,7 +154,10 @@ func (e *Engine) Warmup(id string) bool {
 // Snapshot returns the current room state.
 func (e *Engine) Snapshot() Snapshot {
 	now := e.sync()
-	s := Snapshot{At: now, Phase: e.phase, Config: e.config, Players: make([]Player, len(e.players)), Top: e.top()}
+	s := Snapshot{At: now, Phase: e.phase, Config: e.config, Players: make([]Player, len(e.players)), Top: e.top(), Teams: e.teams()}
+	if s.Teams != nil && len(s.Top) > 0 {
+		s.MVP = s.Top[:min(len(s.Top), MVPN)]
+	}
 	if e.phase != PhaseLobby {
 		s.Round = e.round
 	}
