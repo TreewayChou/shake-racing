@@ -213,7 +213,7 @@ func TestTeamAveragesHandleFractionsAndEmptyTeams(t *testing.T) {
 	}
 }
 
-func TestTeamRaceEndsTheMomentTheFirstTeamAverageReachesTheTarget(t *testing.T) {
+func TestTeamRaceEndsAtTheFirstTeamToTheTargetAndRanksByFinalAverage(t *testing.T) {
 	// red p0+p4, blue p1, green p2, yellow p3.
 	r := startTeamRound(t, 5, map[string]any{"mode": "team-race", "target": 100})
 
@@ -233,20 +233,40 @@ func TestTeamRaceEndsTheMomentTheFirstTeamAverageReachesTheTarget(t *testing.T) 
 		t.Errorf("after red reaches 100: phase %q endAt %d, want grace at %d", s.Phase, s.EndAt, crossedAt)
 	}
 
-	// Blue's late report arrives in grace: it counts, but red got there first.
+	// Blue's late report arrives in grace: it counts, and once the grace
+	// is over teams rank by final average, so blue overtakes red.
 	r.phones[1].Progress(120, 11100)
 	r.phones[1].Echo()
 	r.h.Advance(graceMs * time.Millisecond)
 
 	s = r.host.NextSnapshot(r.h)
-	if red, blue := teamOf(s, "red"), teamOf(s, "blue"); red.Rank != 1 || blue.Rank != 2 || blue.Avg != 120 {
-		t.Errorf("results red %+v blue %+v, want red rank 1, blue rank 2 with avg 120", red, blue)
+	if red, blue := teamOf(s, "red"), teamOf(s, "blue"); blue.Rank != 1 || blue.Avg != 120 || red.Rank != 2 || red.Avg != 100 {
+		t.Errorf("results red %+v blue %+v, want blue rank 1 with avg 120, red rank 2 with avg 100", red, blue)
 	}
 	if s.MVP[0].Name != "p1" || s.MVP[0].Total != 120 {
 		t.Errorf("MVP[0] = %+v, want p1 with 120", s.MVP[0])
 	}
-	if res := r.phones[0].ExpectResult(); res.Team != "red" || res.TeamRank != 1 || res.TeamAvg != 100 {
-		t.Errorf("red phone result = %+v, want winning team red with avg 100", res)
+	if res := r.phones[1].ExpectResult(); res.Team != "blue" || res.TeamRank != 1 || res.TeamAvg != 120 {
+		t.Errorf("blue phone result = %+v, want winning team blue with avg 120", res)
+	}
+	if res := r.phones[0].ExpectResult(); res.Team != "red" || res.TeamRank != 2 || res.TeamAvg != 100 {
+		t.Errorf("red phone result = %+v, want team red second with avg 100", res)
+	}
+}
+
+func TestTeamRaceTieOnFinalAverageGoesToTheEarlierLane(t *testing.T) {
+	// red p0, blue p1, green p2, yellow p3.
+	r := startTeamRound(t, 4, map[string]any{"mode": "team-race", "target": 100})
+	r.advanceTo(10000)
+	r.phones[2].Progress(100, 10000) // green reaches the target first
+	r.phones[2].Echo()
+	r.phones[0].Progress(100, 10050) // red equals it during grace
+	r.phones[0].Echo()
+	r.h.Advance(graceMs * time.Millisecond)
+
+	s := r.host.NextSnapshot(r.h)
+	if red, green := teamOf(s, "red"), teamOf(s, "green"); s.Phase != "results" || red.Rank != 1 || green.Rank != 2 {
+		t.Errorf("phase %q red %+v green %+v, want results with red 1, green 2 (equal averages go by lane order)", s.Phase, red, green)
 	}
 }
 

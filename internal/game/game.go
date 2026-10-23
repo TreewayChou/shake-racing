@@ -97,9 +97,8 @@ type Engine struct {
 	rules       rules // the round's mode rules; valid outside the lobby
 	players     []*entry
 	joins       int
-	standings   []Standing   // final ranking, in results
-	teamResults []TeamScore  // final team scores, in results (team modes)
-	crossed     map[Team]int // team race: order in which teams reached the target
+	standings   []Standing  // final ranking, in results
+	teamResults []TeamScore // final team scores, in results (team modes)
 	events      []Event
 }
 

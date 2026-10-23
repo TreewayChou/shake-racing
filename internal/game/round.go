@@ -148,7 +148,6 @@ func (e *Engine) Start() (Round, error) {
 	e.phase = PhaseCountdown
 	e.rules = rulesFor(e.config.Mode)
 	e.round = Round{Config: e.config, StartAt: e.clock.Now().Add(StartLead)}
-	e.crossed = make(map[Team]int)
 	e.standings, e.teamResults = nil, nil
 	return e.round, nil
 }
@@ -241,7 +240,6 @@ func (e *Engine) sync() (now time.Time) {
 			}
 			e.phase = PhaseRacing
 		case PhaseRacing:
-			e.noteCrossings()
 			end, ok := e.rules.ended(e.round, now, e.participants())
 			if !ok {
 				return now
@@ -250,14 +248,13 @@ func (e *Engine) sync() (now time.Time) {
 			e.phase = PhaseGrace
 			e.events = append(e.events, RoundEnded{})
 		case PhaseGrace:
-			e.noteCrossings() // a late report may bring another team over the line
 			if now.Before(e.round.EndAt.Add(Grace)) {
 				return now
 			}
 			e.phase = PhaseResults
 			e.standings = e.ranking()
 			if e.config.Mode.Team() {
-				e.teamResults = teamScores(e.participants(), e.crossed)
+				e.teamResults = teamScores(e.participants())
 			}
 			e.events = append(e.events, RoundResults{Standings: slices.Clone(e.standings), Teams: slices.Clone(e.teamResults)})
 		default:

@@ -33,26 +33,11 @@ type TeamScore struct {
 	Total   int
 	Avg     float64
 	Rank    int // 1-based; 0 with no members
-
-	crossed int // team race: 1 for the first team to reach the target, 2 next…; 0 if not yet
 }
 
-// ahead reports whether a ranks ahead of b: in a team race, teams that
-// reached the target rank first, in the order they got there; then by
-// average; then in lane order (a and b are given in lane order).
-func (a TeamScore) ahead(b TeamScore) bool {
-	switch {
-	case a.crossed != b.crossed && a.crossed > 0 && (b.crossed == 0 || a.crossed < b.crossed):
-		return true
-	case a.crossed != b.crossed:
-		return false
-	}
-	return a.Avg > b.Avg
-}
-
-// teamScores scores players by team, in lane order. crossed holds the
-// team race's crossing order, nil in other modes.
-func teamScores(players []*entry, crossed map[Team]int) []TeamScore {
+// teamScores scores players by team, in lane order. Teams rank by
+// average, in every team mode; equal averages go to the earlier lane.
+func teamScores(players []*entry) []TeamScore {
 	out := make([]TeamScore, len(Teams))
 	for i, t := range Teams {
 		out[i].Team = t
@@ -69,7 +54,6 @@ func teamScores(players []*entry, crossed map[Team]int) []TeamScore {
 		if out[i].Members > 0 {
 			out[i].Avg = float64(out[i].Total) / float64(out[i].Members)
 		}
-		out[i].crossed = crossed[out[i].Team]
 	}
 	for i := range out {
 		if out[i].Members == 0 {
@@ -77,25 +61,12 @@ func teamScores(players []*entry, crossed map[Team]int) []TeamScore {
 		}
 		out[i].Rank = 1
 		for j := range out {
-			if out[j].Members > 0 && (out[j].ahead(out[i]) || j < i && !out[i].ahead(out[j])) {
+			if out[j].Members > 0 && (out[j].Avg > out[i].Avg || j < i && out[j].Avg == out[i].Avg) {
 				out[i].Rank++
 			}
 		}
 	}
 	return out
-}
-
-// noteCrossings records, in a team race, each team whose average has
-// reached the target, in the order they get there.
-func (e *Engine) noteCrossings() {
-	if e.round.Config.Mode != TeamRace {
-		return
-	}
-	for _, ts := range teamScores(e.participants(), nil) {
-		if _, ok := e.crossed[ts.Team]; !ok && ts.Members > 0 && ts.Avg >= float64(e.round.Config.Target) {
-			e.crossed[ts.Team] = len(e.crossed) + 1
-		}
-	}
 }
 
 // teams is the live (or, in results, final) team scoreboard; nil outside
@@ -105,20 +76,21 @@ func (e *Engine) teams() []TeamScore {
 	case !e.config.Mode.Team():
 		return nil
 	case e.phase == PhaseLobby:
-		return teamScores(e.players, nil)
+		return teamScores(e.players)
 	case e.phase == PhaseResults:
 		return slices.Clone(e.teamResults)
 	}
-	return teamScores(e.participants(), e.crossed)
+	return teamScores(e.participants())
 }
 
 // teamRaceRules: racing ends the moment the first team's average reaches
-// Target, and that team wins. Players rank individually as in a timed
-// round, for the MVP.
+// Target. Reports still count through the grace period, and teams then
+// rank by final average, so a team that got there first can be
+// overtaken. Players rank individually as in a timed round, for the MVP.
 type teamRaceRules struct{}
 
 func (teamRaceRules) ended(r Round, now time.Time, in []*entry) (time.Time, bool) {
-	for _, ts := range teamScores(in, nil) {
+	for _, ts := range teamScores(in) {
 		if ts.Members > 0 && ts.Avg >= float64(r.Config.Target) {
 			return now, true
 		}
