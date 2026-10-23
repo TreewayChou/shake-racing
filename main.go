@@ -67,6 +67,7 @@ func run(cfg config) error {
 		return err
 	}
 	srv := server.New(server.Options{})
+	srv.SetBotURL("http://" + ln.Addr().String()) // bots take the phones' path, over loopback
 	hs := &http.Server{Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 
 	log.Printf("host screen: http://localhost:%d/host", cfg.Port)

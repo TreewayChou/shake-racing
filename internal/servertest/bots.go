@@ -33,3 +33,19 @@ func (h *Host) WaitPlayers(hs *Harness, n int) Snapshot {
 		}
 	}
 }
+
+// WaitPhase ticks until a snapshot is in phase, and returns it. The
+// wall-clock bound only guards against hangs.
+func (h *Host) WaitPhase(hs *Harness, phase string) Snapshot {
+	h.t.Helper()
+	deadline := time.Now().Add(Timeout)
+	for {
+		s := h.NextSnapshot(hs)
+		if s.Phase == phase {
+			return s
+		}
+		if time.Now().After(deadline) {
+			h.t.Fatalf("phase is %q, want %q", s.Phase, phase)
+		}
+	}
+}

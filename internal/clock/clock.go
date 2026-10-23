@@ -33,6 +33,60 @@ type realTicker struct{ t *time.Ticker }
 func (r realTicker) C() <-chan time.Time { return r.t.C }
 func (r realTicker) Stop()               { r.t.Stop() }
 
+// Scaled returns a clock that starts at start and runs factor times as
+// fast as the wall clock. Load tests use it to play real-time rounds
+// quickly.
+func Scaled(start time.Time, factor float64) Clock {
+	return &scaledClock{start: start, t0: time.Now(), factor: factor}
+}
+
+type scaledClock struct {
+	start  time.Time
+	t0     time.Time
+	factor float64
+}
+
+func (s *scaledClock) Now() time.Time {
+	return s.start.Add(time.Duration(float64(time.Since(s.t0)) * s.factor))
+}
+
+func (s *scaledClock) NewTicker(d time.Duration) Ticker {
+	if d <= 0 {
+		panic("clock: non-positive ticker interval")
+	}
+	t := &scaledTicker{t: time.NewTicker(time.Duration(float64(d) / s.factor)), c: make(chan time.Time, 1), stop: make(chan struct{})}
+	go func() {
+		for {
+			select {
+			case <-t.stop:
+				return
+			case <-t.t.C:
+				select {
+				case t.c <- s.Now():
+				default:
+				}
+			}
+		}
+	}()
+	return t
+}
+
+type scaledTicker struct {
+	t    *time.Ticker
+	c    chan time.Time
+	stop chan struct{}
+	once sync.Once
+}
+
+func (t *scaledTicker) C() <-chan time.Time { return t.c }
+
+func (t *scaledTicker) Stop() {
+	t.once.Do(func() {
+		t.t.Stop()
+		close(t.stop)
+	})
+}
+
 // Fake is a manually advanced clock. Tickers fire only when Advance moves
 // time past their next deadline; like time.Ticker, a slow reader drops ticks.
 type Fake struct {

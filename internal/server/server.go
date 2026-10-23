@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"racing/internal/bots"
 	"racing/internal/clock"
 	"racing/internal/game"
 	"racing/internal/web"
@@ -27,6 +28,9 @@ const BroadcastInterval = 100 * time.Millisecond
 type Options struct {
 	// Clock drives the engine and broadcaster. Defaults to the wall clock.
 	Clock clock.Clock
+	// Bots configures the simulated players the host can add. Nil means
+	// bots.DefaultSim with a random seed.
+	Bots *bots.Config
 }
 
 // Server serves the game over HTTP and WebSocket. Create with New and
@@ -45,6 +49,11 @@ type Server struct {
 	urls    []byte // current urls message; nil until SetURLs
 	qr      []byte // PNG of the join URL; nil until one is known
 
+	botCfg    bots.Config
+	botToken  string              // marks bot connections to the phone endpoint
+	bots      *bots.Manager       // nil until SetBotURL
+	botPhones map[*phone]struct{} // bot connections, joined or not
+
 	ctx    context.Context
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -55,15 +64,22 @@ func New(opts Options) *Server {
 	if opts.Clock == nil {
 		opts.Clock = clock.Real()
 	}
+	botCfg := bots.Config{Sim: bots.DefaultSim}
+	if opts.Bots != nil {
+		botCfg = *opts.Bots
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
-		clock:  opts.Clock,
-		engine: game.New(opts.Clock),
-		hosts:  make(map[*conn]struct{}),
-		phones: make(map[*phone]struct{}),
-		clocks: make(map[string][]syncSample),
-		ctx:    ctx,
-		cancel: cancel,
+		botCfg:    botCfg,
+		botToken:  newToken(),
+		botPhones: make(map[*phone]struct{}),
+		clock:     opts.Clock,
+		engine:    game.New(opts.Clock),
+		hosts:     make(map[*conn]struct{}),
+		phones:    make(map[*phone]struct{}),
+		clocks:    make(map[string][]syncSample),
+		ctx:       ctx,
+		cancel:    cancel,
 	}
 	s.mux = http.NewServeMux()
 	s.mux.Handle("GET /play", page(playPage(game.DefaultDetector)))
@@ -98,6 +114,12 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.Serve
 
 // Close stops the broadcaster and closes all WebSocket connections.
 func (s *Server) Close() {
+	s.mu.Lock()
+	m := s.bots
+	s.mu.Unlock()
+	if m != nil {
+		m.Close()
+	}
 	s.cancel()
 	s.wg.Wait()
 }
@@ -132,9 +154,15 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 	}
 	defer c.close()
 	ph := &phone{c: c} // ph.id is set once this connection has joined
+	s.mu.Lock()
+	if tok := r.URL.Query().Get("bot"); tok != "" && tok == s.botToken {
+		s.botPhones[ph] = struct{}{}
+	}
+	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		delete(s.phones, ph)
+		delete(s.botPhones, ph)
 		s.mu.Unlock()
 	}()
 	for {
@@ -153,6 +181,10 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			s.mu.Lock()
+			if c.ctx.Err() != nil { // a bot cleared while this join was in flight
+				s.mu.Unlock()
+				return
+			}
 			err := s.joinLocked(ph, m)
 			s.mu.Unlock()
 			switch {

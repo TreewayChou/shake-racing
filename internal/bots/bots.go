@@ -185,6 +185,7 @@ type Interval struct{ From, To time.Time }
 // Result is the standing the server reported for the latest round.
 type Result struct {
 	Rank, TotalShakes int
+	Finished          bool // race: reached the target
 }
 
 // Bot is one simulated player. Its fields are owned by its run goroutine,
@@ -253,6 +254,7 @@ type inMsg struct {
 	Target   int   `json:"target"`
 	Total    int   `json:"totalShakes"`
 	Rank     int   `json:"rank"`
+	Finished bool  `json:"finished"`
 }
 
 func (b *Bot) run(ctx context.Context) {
@@ -319,7 +321,7 @@ func (b *Bot) handle(m inMsg) bool {
 		if r := b.race; r != nil {
 			r.done = true
 		}
-		b.m.update(b, func(s *Stats) { s.Result = &Result{Rank: m.Rank, TotalShakes: m.Total} })
+		b.m.update(b, func(s *Stats) { s.Result = &Result{Rank: m.Rank, TotalShakes: m.Total, Finished: m.Finished} })
 	case "kicked", "full":
 		return false
 	case "error":
