@@ -35,24 +35,36 @@ button:disabled{opacity:.5}
 <script>
 // K: shake-detector constants, injected by the server.
 var K=__K__;
-var $=function(i){return document.getElementById(i)},ws,me=localStorage.getItem("pid"),joined=0;
+// The playerId and name are kept in localStorage, so a refresh, swipe-away
+// or dropped connection rejoins as the same player (same score mid-race).
+var $=function(i){return document.getElementById(i)},ws,ls={},joined=0,stop=0,prev=null;
+try{ls=localStorage}catch(_){}
+var me=ls.pid,nick=ls.nm;
+function store(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(_){}}
 function say(t){$("msg").textContent=t}
 function warn(t){$("warn").textContent=t}
 function send(o){if(ws&&ws.readyState==1)ws.send(JSON.stringify(o))}
+// end stops for good: full, kicked.
+function end(t){stop=1;joined=0;if(R)clearInterval(R.iv);R=null;$("form").className="hide";$("n").className="hide";$("t").textContent="";$("mode").textContent="";say(t);ws.close()}
 function connect(name){
+  nick=name;stop=0;
   ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/play");
   ws.onopen=function(){send({type:"join",name:name,playerId:me||undefined})};
   ws.onmessage=function(e){
     var m=JSON.parse(e.data);
-    if(m.type=="welcome"){me=m.playerId;localStorage.setItem("pid",me);if(m.constants)K=m.constants;joined=1;$("form").className="hide";$("n").className="";lobby()}
-    else if(m.type=="error"){$("go").disabled=false;say(m.reason=="name"?"暱稱需為 1–8 個字":"發生錯誤");ws.close()}
+    if(m.type=="welcome"){me=m.playerId;store("pid",me);store("nm",nick);if(m.constants)K=m.constants;joined=1;if(arming)$("form").className="hide";$("n").className="";lobby()}
+    else if(m.type=="error"){$("go").disabled=false;say(m.reason=="name"?"暱稱需為 1–8 個字":"發生錯誤");stop=1;ws.close()}
+    else if(m.type=="full")end("本場已滿");
+    else if(m.type=="kicked"){me=null;store("pid");end("已被移出")}
+    else if(m.type=="wait"){if(R){clearInterval(R.iv);R=null}$("t").textContent="";say("下一場開放加入，請稍候…")}
     else if(m.type=="ping")send({type:"pong",id:m.id,clientTs:Date.now()});
-    else if(m.type=="config"){cfg=m;if(R&&R.res)R=null;if(!R)lobby()}
+    else if(m.type=="config"){cfg=m;if(R){clearInterval(R.iv);prev=R;R=null}lobby()}
     else if(m.type=="countdown")begin(m);
     else if(m.type=="end"&&R&&!R.res)say("時間到！結算中…");
     else if(m.type=="result"&&R){R.res=1;R.lock=1;clearInterval(R.iv);$("t").textContent="";$("n").textContent=m.totalShakes;say("第 "+m.rank+" 名／共 "+m.players+" 人");vib([100,60,100])}
   };
-  ws.onclose=function(){if(!$("go").disabled)return;joined=0;say("連線中斷，請重新整理")};
+  // Reconnect after a drop, unless told to stop.
+  ws.onclose=function(){if(stop)return;if(joined)say("連線中斷，重新連線中…");joined=0;setTimeout(function(){if(!stop)connect(nick)},1000)};
 }
 
 // Shake detector. Primary rule: |acceleration| >= K.accel. Fallback when
@@ -102,9 +114,14 @@ function lobby(){
   if(cfg)$("mode").textContent="個人限時 "+cfg.durationMs/1000+" 秒";
 }
 function begin(m){
-  if(R)clearInterval(R.iv);
-  R={S:m.startAt,D:m.durationMs,total:0,go:0,lock:0,res:0,sent:0};
-  $("n").textContent=0;say("準備…");
+  if(R){clearInterval(R.iv);prev=R}
+  // Resuming after a reconnect: keep the larger of the server's and our own
+  // count, since shakes made while offline were never sent.
+  var t=m.totalShakes||0;
+  if(prev&&Math.abs(prev.S-m.startAt)<2000)t=Math.max(t,prev.total);
+  prev=null;
+  R={S:m.startAt,D:m.durationMs,total:t,go:0,lock:0,res:0,sent:0};
+  $("n").textContent=t;say("準備…");
   R.iv=setInterval(loop,30);loop();
 }
 function loop(){
@@ -130,24 +147,39 @@ function arm(){
 function wake(){try{navigator.wakeLock.request("screen").catch(function(){})}catch(_){}}
 document.addEventListener("visibilitychange",function(){if(joined&&document.visibilityState=="visible")wake()});
 
-$("go").onclick=function(){
-  var n=$("name").value.trim();
-  if(n.length<1||[...n].length>8){say("暱稱需為 1–8 個字");return}
-  // Blur first so shaking can't trigger iOS Shake-to-Undo on the input.
-  $("name").blur();
-  $("go").disabled=true;
-  // iOS 13+: requestPermission must be called inside the tap handler.
-  var D=window.DeviceMotionEvent;
-  if(D&&typeof D.requestPermission=="function"){
-    D.requestPermission().then(function(s){
+// ready enables the sensor; on iOS 13+ requestPermission must be called
+// inside a tap handler.
+var arming=0,ios=window.DeviceMotionEvent&&typeof DeviceMotionEvent.requestPermission=="function";
+function ready(){
+  arming=1;
+  if(ios){
+    DeviceMotionEvent.requestPermission().then(function(s){
       if(s=="granted")arm();
       else warn("⚠️ 未允許動作感應，無法計算搖動。請關閉 Safari 分頁後重新開啟此頁，並在提示時按「允許」。");
     },noSensor);
   }else arm();
   wake();
+}
+$("go").onclick=function(){
+  // Rejoined from a stored playerId: the tap only enables the sensor.
+  if(me&&nick&&ws){$("form").className="hide";ready();return}
+  var n=$("name").value.trim();
+  if(n.length<1||[...n].length>8){say("暱稱需為 1–8 個字");return}
+  // Blur first so shaking can't trigger iOS Shake-to-Undo on the input.
+  $("name").blur();
+  $("go").disabled=true;
+  ready();
   say("連線中…");
   connect(n);
 };
+// A stored player reconnects straight away; iOS still needs one tap for
+// the sensor.
+if(me&&nick){
+  $("name").value=nick;$("name").className="hide";$("go").textContent="繼續";$("go").disabled=false;
+  if(!ios)ready();
+  say("重新連線中…");
+  connect(nick);
+}
 </script>
 </body>
 </html>

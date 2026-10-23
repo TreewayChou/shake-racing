@@ -81,6 +81,7 @@ func (p *Phone) SyncClock(n int, offset time.Duration) {
 type Countdown struct {
 	StartAt    int64 `json:"startAt"` // on the receiving phone's own clock, Unix ms
 	DurationMs int64 `json:"durationMs"`
+	Total      int   `json:"totalShakes"` // accepted so far; non-zero when resuming after a reconnect
 }
 
 // ExpectCountdown waits for the next countdown message.

@@ -144,13 +144,18 @@ func (e *Engine) Again() error {
 	if e.phase != PhaseResults {
 		return ErrWrongPhase
 	}
+	e.toLobby()
+	return nil
+}
+
+// toLobby ends the round, keeping the roster.
+func (e *Engine) toLobby() {
 	e.phase = PhaseLobby
 	e.round = Round{}
 	e.standings = nil
 	for _, p := range e.players {
 		p.Total, p.reached, p.inRound = 0, 0, false
 	}
-	return nil
 }
 
 // Progress records a participant's cumulative report. Reports are

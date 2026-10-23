@@ -39,7 +39,8 @@ type Server struct {
 	mu      sync.Mutex
 	engine  *game.Engine
 	hosts   map[*conn]struct{}
-	phones  map[*phone]struct{} // joined phones
+	phones  map[*phone]struct{}     // joined phones
+	clocks  map[string][]syncSample // clock-sync samples by player id, kept across reconnects
 	pingSeq int64
 	urls    []byte // current urls message; nil until SetURLs
 	qr      []byte // PNG of the join URL; nil until one is known
@@ -60,6 +61,7 @@ func New(opts Options) *Server {
 		engine: game.New(opts.Clock),
 		hosts:  make(map[*conn]struct{}),
 		phones: make(map[*phone]struct{}),
+		clocks: make(map[string][]syncSample),
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -151,17 +153,13 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			s.mu.Lock()
-			p, err := s.engine.Join(m.Name)
-			if err == nil {
-				ph.id = p.ID
-				s.phones[ph] = struct{}{}
-				c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID, Constants: newDetectorMsg(game.DefaultDetector)}))
-				c.send(mustJSON(newConfigMsg(s.engine.Config())))
-				s.startClockSyncLocked(ph)
-			}
+			err := s.joinLocked(ph, m)
 			s.mu.Unlock()
-			if errors.Is(err, game.ErrInvalidName) {
+			switch {
+			case errors.Is(err, game.ErrInvalidName):
 				c.send(mustJSON(errorMsg{Type: "error", Reason: "name"}))
+			case errors.Is(err, game.ErrFull):
+				c.send(mustJSON(signalMsg{Type: "full"}))
 			}
 		default:
 			if ph.id != "" {
@@ -176,6 +174,7 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 func (s *Server) warmup(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.engine.Seen(id)
 	if !s.engine.Warmup(id) {
 		return
 	}

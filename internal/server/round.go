@@ -55,6 +55,7 @@ func (ph *phone) toLocal(t time.Time) int64 { return t.Add(ph.offset()).UnixMill
 func (s *Server) phoneMessage(ph *phone, typ string, data []byte) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.engine.Seen(ph.id)
 	switch typ {
 	case "pong":
 		var m pongMsg
@@ -106,6 +107,9 @@ func (s *Server) pongLocked(ph *phone, m pongMsg) {
 	})
 	if n := len(ph.samples); n > syncSamples {
 		ph.samples = ph.samples[n-syncSamples:]
+	}
+	if _, ok := s.engine.Player(ph.id); ok {
+		s.clocks[ph.id] = ph.samples
 	}
 	if len(ph.samples) < syncBurst {
 		s.pingLocked(ph)
@@ -163,6 +167,14 @@ func (s *Server) hostMessage(typ string, data []byte) {
 				DurationMs: r.Config.Duration.Milliseconds(),
 			}))
 		}
+	case "kick":
+		var m kickMsg
+		if json.Unmarshal(data, &m) == nil {
+			s.kickLocked(m.ID)
+		}
+	case "reset":
+		s.engine.Reset()
+		s.sendPhonesLocked(mustJSON(newConfigMsg(s.engine.Config())))
 	case "again":
 		if s.engine.Again() == nil {
 			s.sendPhonesLocked(mustJSON(newConfigMsg(s.engine.Config())))
@@ -182,7 +194,13 @@ func (s *Server) dispatchLocked() {
 	for _, ev := range s.engine.Events() {
 		switch ev := ev.(type) {
 		case game.RoundEnded:
-			s.sendPhonesLocked(mustJSON(endMsg{Type: "end"}))
+			// Only participants: a late joiner keeps waiting for the next round.
+			b := mustJSON(endMsg{Type: "end"})
+			for ph := range s.phones {
+				if p, ok := s.engine.Player(ph.id); ok && !p.Waiting {
+					ph.c.send(b)
+				}
+			}
 		case game.RoundResults:
 			byID := make(map[string]game.Standing, len(ev.Standings))
 			for _, st := range ev.Standings {
@@ -218,7 +236,7 @@ func (s *Server) snapshotLocked() []byte {
 		msg.EndAt = snap.Round.EndAt.UnixMilli()
 	}
 	for i, p := range snap.Players {
-		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name, Total: p.Total}
+		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name, Total: p.Total, Offline: p.Offline, Waiting: p.Waiting}
 	}
 	for i, st := range snap.Top {
 		msg.Top[i] = snapshotPlayer{ID: st.ID, Name: st.Name, Total: st.Total, Rank: st.Rank}

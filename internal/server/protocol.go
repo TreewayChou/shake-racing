@@ -67,6 +67,7 @@ type pingMsg struct {
 type welcomeMsg struct {
 	Type      string      `json:"type"` // "welcome"
 	PlayerID  string      `json:"playerId"`
+	Name      string      `json:"name"` // deduplicated; the kept name on a reconnect
 	Constants detectorMsg `json:"constants"`
 }
 
@@ -101,6 +102,13 @@ type countdownMsg struct {
 	Type       string `json:"type"` // "countdown"
 	StartAt    int64  `json:"startAt"`
 	DurationMs int64  `json:"durationMs,omitempty"`
+	Total      int    `json:"totalShakes,omitempty"` // score kept, when resuming after a reconnect
+}
+
+// signalMsg is a message with no payload: wait (joined mid-round, races
+// in the next one), full (room at capacity) or kicked (removed by the host).
+type signalMsg struct {
+	Type string `json:"type"`
 }
 
 type errorMsg struct {
@@ -115,6 +123,11 @@ type errorMsg struct {
 type setConfigMsg struct {
 	Mode       *string `json:"mode"`
 	DurationMs *int64  `json:"durationMs"`
+}
+
+// kickMsg removes a player from the roster.
+type kickMsg struct {
+	ID string `json:"id"`
 }
 
 // Server -> host.
@@ -151,4 +164,7 @@ type snapshotPlayer struct {
 	Name  string `json:"name"`
 	Total int    `json:"total"`
 	Rank  int    `json:"rank,omitempty"`
+
+	Offline bool `json:"offline,omitempty"` // missed 2 heartbeats
+	Waiting bool `json:"waiting,omitempty"` // joined mid-round
 }

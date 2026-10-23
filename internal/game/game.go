@@ -46,14 +46,18 @@ type Player struct {
 	ID    string
 	Name  string
 	Total int // shakes accepted this round
+
+	Waiting bool // joined after the round started; races in the next one
+	Offline bool // not seen for OfflineAfter; stays in the roster
 }
 
 // entry is the engine's own roster record.
 type entry struct {
 	Player
-	seq     int           // join order, the last tie-break
-	inRound bool          // takes part in the current round
-	reached time.Duration // phone-elapsed time when Total was reached
+	seq      int           // join order, the last tie-break
+	inRound  bool          // takes part in the current round
+	reached  time.Duration // phone-elapsed time when Total was reached
+	lastSeen time.Time     // last message from the player's phone
 }
 
 // Snapshot is a point-in-time view of the room. Taking one advances the
@@ -95,16 +99,29 @@ func (e *Engine) find(id string) *entry {
 }
 
 // Join adds a player with the given nickname and returns the new player.
-func (e *Engine) Join(name string) (Player, error) {
+// If id names a player already in the roster, that player reconnects
+// instead: identity, name and score are kept and name is ignored.
+//
+// A new player who joins once a round has started waits for the next one.
+// Join fails with ErrFull when the roster holds MaxPlayers. A nickname
+// already taken gets a "#2"-style suffix.
+func (e *Engine) Join(name, id string) (Player, error) {
+	now := e.sync()
+	if p := e.find(id); id != "" && p != nil {
+		p.lastSeen = now
+		return e.view(p, now), nil
+	}
 	name = strings.TrimSpace(name)
 	if n := utf8.RuneCountInString(name); n < 1 || n > MaxNameLen {
 		return Player{}, ErrInvalidName
 	}
-	e.sync()
+	if len(e.players) >= MaxPlayers {
+		return Player{}, ErrFull
+	}
 	e.joins++
-	p := &entry{Player: Player{ID: newID(), Name: name}, seq: e.joins}
+	p := &entry{Player: Player{ID: newID(), Name: e.uniqueName(name)}, seq: e.joins, lastSeen: now}
 	e.players = append(e.players, p)
-	return p.Player, nil
+	return e.view(p, now), nil
 }
 
 // Warmup reports whether a lobby warm-up shake from player id should be
@@ -123,7 +140,7 @@ func (e *Engine) Snapshot() Snapshot {
 		s.Round = e.round
 	}
 	for i, p := range e.players {
-		s.Players[i] = p.Player
+		s.Players[i] = e.view(p, now)
 	}
 	return s
 }
