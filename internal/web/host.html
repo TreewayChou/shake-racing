@@ -1,1 +1,47 @@
-<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>搖搖競速 大螢幕</title><body></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>搖搖競速 大螢幕</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;background:#10164a;color:#fff}
+header{display:flex;align-items:baseline;justify-content:space-between;padding:24px 40px}
+h1{margin:0;font-size:48px}
+#count{font-size:28px;opacity:.85}
+#status{padding:0 40px;color:#ffcc00;min-height:1.5em}
+#cards{display:flex;flex-wrap:wrap;gap:12px;padding:16px 40px}
+.card{background:#2a3aa8;border-radius:12px;padding:12px 20px;font-size:24px;font-weight:600}
+</style>
+</head>
+<body>
+<header><h1>🏁 百人搖搖競速</h1><div id="count">0 人已加入</div></header>
+<div id="status"></div>
+<div id="cards"></div>
+<script>
+(function(){
+  var cards=document.getElementById("cards"),count=document.getElementById("count"),status=document.getElementById("status"),last="";
+  function render(s){
+    var key=s.players.map(function(p){return p.id}).join(",");
+    count.textContent=s.players.length+" 人已加入";
+    if(key===last)return;
+    last=key;
+    cards.textContent="";
+    s.players.forEach(function(p){
+      var d=document.createElement("div");
+      d.className="card";d.textContent=p.name;d.dataset.id=p.id;
+      cards.appendChild(d);
+    });
+  }
+  function connect(){
+    var ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/host");
+    ws.onopen=function(){status.textContent=""};
+    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")render(m)};
+    ws.onclose=function(){status.textContent="與伺服器斷線，重新連線中…";setTimeout(connect,1000)};
+  }
+  connect();
+})();
+</script>
+</body>
+</html>

@@ -1,1 +1,49 @@
-<!doctype html><html lang="zh-Hant"><meta charset="utf-8"><title>搖搖競速</title><body></body></html>
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>搖搖競速</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;padding:24px;font-family:system-ui,sans-serif;background:#1e2a78;color:#fff;text-align:center}
+h1{margin:0;font-size:28px}
+input,button{font:inherit;font-size:22px;width:100%;max-width:320px;padding:14px;border-radius:12px;border:0}
+input{text-align:center}
+button{background:#ffcc00;color:#222;font-weight:700}
+button:disabled{opacity:.5}
+#msg{min-height:1.5em;font-size:18px}
+.hide{display:none}
+</style>
+</head>
+<body>
+<h1>🏁 搖搖競速</h1>
+<div id="form">
+<p><input id="name" maxlength="8" placeholder="輸入暱稱（1–8 字）" autocomplete="off"></p>
+<p><button id="go">準備</button></p>
+</div>
+<div id="msg"></div>
+<script>
+var $=function(i){return document.getElementById(i)},ws,me=localStorage.getItem("pid");
+function say(t){$("msg").textContent=t}
+function connect(name){
+  ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/play");
+  ws.onopen=function(){ws.send(JSON.stringify({type:"join",name:name,playerId:me||undefined}))};
+  ws.onmessage=function(e){
+    var m=JSON.parse(e.data);
+    if(m.type=="welcome"){me=m.playerId;localStorage.setItem("pid",me);$("form").className="hide";say("已加入，等待主持人開始…")}
+    else if(m.type=="error"){$("go").disabled=false;say(m.reason=="name"?"暱稱需為 1–8 個字":"發生錯誤");ws.close()}
+  };
+  ws.onclose=function(){if(!$("go").disabled)return;say("連線中斷，請重新整理")};
+}
+$("go").onclick=function(){
+  var n=$("name").value.trim();
+  if(n.length<1||[...n].length>8){say("暱稱需為 1–8 個字");return}
+  $("name").blur();
+  $("go").disabled=true;
+  say("連線中…");
+  connect(n);
+};
+</script>
+</body>
+</html>
