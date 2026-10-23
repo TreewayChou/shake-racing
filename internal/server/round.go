@@ -52,6 +52,19 @@ func (ph *phone) offset() time.Duration {
 // toLocal converts a server-clock moment to Unix ms on the phone's clock.
 func (ph *phone) toLocal(t time.Time) int64 { return t.Add(ph.offset()).UnixMilli() }
 
+// newCountdownMsg announces r's start, converted to ph's own clock, with
+// whatever score (if any) the phone should resume from: a fresh round
+// start has none, a reconnect mid-round resumes with total and finish.
+func newCountdownMsg(ph *phone, r game.Round, total int, finish time.Duration) countdownMsg {
+	return countdownMsg{
+		Type:        "countdown",
+		StartAt:     ph.toLocal(r.StartAt),
+		modeOptions: newModeOptions(r.Config),
+		Total:       total,
+		FinishedMs:  finish.Milliseconds(),
+	}
+}
+
 // phoneMessage handles a message from a joined phone.
 func (s *Server) phoneMessage(ph *phone, typ string, data []byte) {
 	s.mu.Lock()
@@ -168,11 +181,7 @@ func (s *Server) hostMessage(typ string, data []byte) {
 			return
 		}
 		for ph := range s.phones {
-			ph.c.send(mustJSON(countdownMsg{
-				Type:        "countdown",
-				StartAt:     ph.toLocal(r.StartAt),
-				modeOptions: newModeOptions(r.Config),
-			}))
+			ph.c.send(mustJSON(newCountdownMsg(ph, r, 0, 0)))
 		}
 	case "end":
 		s.engine.End()

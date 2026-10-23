@@ -15,7 +15,7 @@ import (
 
 func TestHostReceivesURLsOnConnectAndOnChange(t *testing.T) {
 	h := servertest.Start(t)
-	h.Server.SetURLs(server.URLs{LAN: "http://192.168.1.5:3000", Mode: server.ModePending})
+	h.Server.SetURLs(server.URLs{LAN: "http://192.168.1.5:3000", Mode: server.TunnelPending})
 	host := h.Host()
 
 	got := host.ExpectURLs()
@@ -24,7 +24,7 @@ func TestHostReceivesURLsOnConnectAndOnChange(t *testing.T) {
 		t.Errorf("urls on connect = %+v, want %+v", got, want)
 	}
 
-	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", LAN: "http://192.168.1.5:3000", Mode: server.ModeTunnel})
+	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", LAN: "http://192.168.1.5:3000", Mode: server.TunnelActive})
 	got = host.ExpectURLs()
 	want = servertest.URLs{Public: "https://abc-def.trycloudflare.com/play", LAN: "http://192.168.1.5:3000/play", TunnelMode: "tunnel"}
 	if got != want {
@@ -34,11 +34,11 @@ func TestHostReceivesURLsOnConnectAndOnChange(t *testing.T) {
 
 func TestHostIsToldWhenTheTunnelIsLost(t *testing.T) {
 	h := servertest.Start(t)
-	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", Mode: server.ModeTunnel})
+	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", Mode: server.TunnelActive})
 	host := h.Host()
 	host.ExpectURLs()
 
-	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", Mode: server.ModeLost})
+	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", Mode: server.TunnelLost})
 	got := host.ExpectURLs()
 	if want := (servertest.URLs{Public: "https://abc-def.trycloudflare.com/play", TunnelMode: "lost"}); got != want {
 		t.Errorf("urls after the tunnel is lost = %+v, want %+v", got, want)
@@ -67,7 +67,7 @@ func getQR(t *testing.T, h *servertest.Harness) (*http.Response, []byte) {
 
 func TestQREncodesPublicPlayURL(t *testing.T) {
 	h := servertest.Start(t)
-	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", LAN: "http://192.168.1.5:3000", Mode: server.ModeTunnel})
+	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", LAN: "http://192.168.1.5:3000", Mode: server.TunnelActive})
 
 	resp, body := getQR(t, h)
 	if resp.StatusCode != http.StatusOK || resp.Header.Get("Content-Type") != "image/png" {
@@ -83,7 +83,7 @@ func TestQREncodesPublicPlayURL(t *testing.T) {
 
 func TestQRFallsBackToLANWhenTunnelFails(t *testing.T) {
 	h := servertest.Start(t)
-	h.Server.SetURLs(server.URLs{LAN: "http://192.168.1.5:3000", Mode: server.ModeFailed})
+	h.Server.SetURLs(server.URLs{LAN: "http://192.168.1.5:3000", Mode: server.TunnelFailed})
 
 	_, body := getQR(t, h)
 	if !bytes.Equal(body, qrOf(t, "http://192.168.1.5:3000/play")) {

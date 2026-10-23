@@ -23,8 +23,8 @@ const (
 // when two teams are equally small or score the same average.
 var Teams = []Team{Red, Blue, Green, Yellow}
 
-// MVPN is the length of the individual MVP list in team modes.
-const MVPN = 5
+// MVPTop is the length of the individual MVP list in team modes.
+const MVPTop = 5
 
 // TeamScore is a team's standing: its score is the average shakes per
 // member, so team size does not decide the winner.

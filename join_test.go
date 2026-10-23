@@ -9,24 +9,22 @@ import (
 func TestInitialURLs(t *testing.T) {
 	lan := "http://192.168.1.5:3000"
 	cases := []struct {
-		name       string
-		cfg        config
-		want       server.URLs
-		wantTunnel bool
+		name string
+		cfg  config
+		want server.URLs
 	}{
 		{"default starts a tunnel and hides the loopback-only LAN URL", config{Port: 3000},
-			server.URLs{Mode: server.ModePending}, true},
+			server.URLs{Mode: server.TunnelPending}},
 		{"-public-url overrides the tunnel", config{Port: 3000, PublicURL: "https://game.example.com/"},
-			server.URLs{Public: "https://game.example.com", LAN: lan, Mode: server.ModeCustom}, false},
+			server.URLs{Public: "https://game.example.com", LAN: lan, Mode: server.TunnelCustom}},
 		{"-public-url wins over -no-tunnel", config{Port: 3000, NoTunnel: true, PublicURL: "https://game.example.com"},
-			server.URLs{Public: "https://game.example.com", LAN: lan, Mode: server.ModeCustom}, false},
+			server.URLs{Public: "https://game.example.com", LAN: lan, Mode: server.TunnelCustom}},
 		{"-no-tunnel is LAN mode", config{Port: 3000, NoTunnel: true},
-			server.URLs{LAN: lan, Mode: server.ModeLAN}, false},
+			server.URLs{LAN: lan, Mode: server.TunnelLAN}},
 	}
 	for _, c := range cases {
-		got, tunnel := initialURLs(c.cfg, lan)
-		if got != c.want || tunnel != c.wantTunnel {
-			t.Errorf("%s: initialURLs = %+v, %v; want %+v, %v", c.name, got, tunnel, c.want, c.wantTunnel)
+		if got := initialURLs(c.cfg, lan); got != c.want {
+			t.Errorf("%s: initialURLs = %+v; want %+v", c.name, got, c.want)
 		}
 	}
 }

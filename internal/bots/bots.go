@@ -16,6 +16,7 @@ import (
 	"github.com/coder/websocket"
 
 	"racing/internal/clock"
+	"racing/internal/game"
 )
 
 // Sim describes a bot's simulated phone and network. Each bot draws its
@@ -200,15 +201,15 @@ type Bot struct {
 
 	stallUntil time.Time
 	out        chan outMsg
-	race       *race  // nil outside a round
-	mode       string // from the latest config
+	race       *race     // nil outside a round
+	mode       game.Mode // from the latest config
 }
 
 // finishAt is the total that finishes a round for the bot: the target in
 // an individual race. In a team race the team average decides the end,
 // so, like a phone, the bot keeps counting.
 func (b *Bot) finishAt(target int) int {
-	if b.mode == "team-race" {
+	if b.mode == game.TeamRace {
 		return 0
 	}
 	return target
@@ -230,12 +231,20 @@ type race struct {
 	done     bool // result received
 }
 
+// uniform draws a float64 uniformly from [min, max).
+func uniform(rng *rand.Rand, min, max float64) float64 { return min + rng.Float64()*(max-min) }
+
+// uniformDuration draws a time.Duration uniformly from [min, max).
+func uniformDuration(rng *rand.Rand, min, max time.Duration) time.Duration {
+	return time.Duration(uniform(rng, float64(min), float64(max)))
+}
+
 func newBot(m *Manager, name string, sim Sim, rng *rand.Rand) *Bot {
 	b := &Bot{m: m, sim: sim, rng: rng, out: make(chan outMsg, 256)}
 	b.stats = Stats{
 		Name:    name,
-		Latency: sim.LatencyMin + time.Duration(rng.Float64()*float64(sim.LatencyMax-sim.LatencyMin)),
-		Rate:    sim.RateMin + rng.Float64()*(sim.RateMax-sim.RateMin),
+		Latency: uniformDuration(rng, sim.LatencyMin, sim.LatencyMax),
+		Rate:    uniform(rng, sim.RateMin, sim.RateMax),
 	}
 	return b
 }
@@ -316,7 +325,7 @@ func (b *Bot) handle(m inMsg) bool {
 	case "ping":
 		b.send(map[string]any{"type": "pong", "id": m.ID, "clientTs": now.UnixMilli()}, true)
 	case "config":
-		b.mode = m.Mode
+		b.mode = game.Mode(m.Mode)
 		b.race = nil
 	case "countdown":
 		b.race = &race{
@@ -390,7 +399,7 @@ func (b *Bot) maybeStall() {
 	if b.rng.Float64() >= p {
 		return
 	}
-	d := b.sim.StallMin + time.Duration(b.rng.Float64()*float64(b.sim.StallMax-b.sim.StallMin))
+	d := uniformDuration(b.rng, b.sim.StallMin, b.sim.StallMax)
 	b.stallUntil = now.Add(d)
 	b.m.update(b, func(s *Stats) { s.Stalls = append(s.Stalls, Interval{now, b.stallUntil}) })
 }

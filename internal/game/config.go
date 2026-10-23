@@ -30,6 +30,10 @@ const (
 // Team reports whether m is a 分隊 mode, scored by team averages.
 func (m Mode) Team() bool { return m == TeamTimed || m == TeamRace }
 
+// Race reports whether m is a 競速 mode: racing to a target rather than
+// counting for a fixed duration.
+func (m Mode) Race() bool { return m == IndividualRace || m == TeamRace }
+
 // Durations are the timed-mode round lengths the host can pick.
 var Durations = []time.Duration{15 * time.Second, 30 * time.Second, 45 * time.Second, 60 * time.Second}
 

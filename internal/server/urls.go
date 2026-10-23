@@ -13,12 +13,12 @@ import (
 type TunnelMode string
 
 const (
-	ModePending TunnelMode = "pending" // quick tunnel still starting
-	ModeTunnel  TunnelMode = "tunnel"  // public URL is a quick tunnel
-	ModeCustom  TunnelMode = "custom"  // public URL came from -public-url
-	ModeLAN     TunnelMode = "lan"     // -no-tunnel: LAN only, by choice
-	ModeFailed  TunnelMode = "failed"  // tunnel failed: LAN fallback
-	ModeLost    TunnelMode = "lost"    // tunnel was up, then cloudflared exited: warn only
+	TunnelPending TunnelMode = "pending" // quick tunnel still starting
+	TunnelActive  TunnelMode = "tunnel"  // public URL is a quick tunnel
+	TunnelCustom  TunnelMode = "custom"  // public URL came from -public-url
+	TunnelLAN     TunnelMode = "lan"     // -no-tunnel: LAN only, by choice
+	TunnelFailed  TunnelMode = "failed"  // tunnel failed: LAN fallback
+	TunnelLost    TunnelMode = "lost"    // tunnel was up, then cloudflared exited: warn only
 )
 
 // URLs are the base URLs (scheme://host[:port], no path) players can reach.

@@ -181,9 +181,12 @@ button:disabled{opacity:.4;cursor:default}
   opts("targets","target",[100,200,300,500].map(function(n){return[n,n+" 下"]}));
   opts("caps","timeCapMs",[60,90,120,180].map(function(s){return[s*1000,s+" 秒"]}));
   function lit(box,v){Array.prototype.forEach.call($(box).children,function(b){b.classList.toggle("on",b.dataset.v==String(v))})}
-  function isRace(s){return s.mode=="individual-race"}
+  // isIndividualRace: the only mode with a per-player finish time and a
+  // time cap. isRaceMode: either race mode, timed by target not duration.
+  function isIndividualRace(s){return s.mode=="individual-race"}
+  function isRaceMode(s){return s.mode=="individual-race"||s.mode=="team-race"}
   // Team modes: four lanes scored by average shakes per member.
-  function isTeam(s){return s.mode.slice(0,4)=="team"}
+  function isTeam(s){return s.mode=="team-timed"||s.mode=="team-race"}
   var TN={red:"紅隊",blue:"藍隊",green:"綠隊",yellow:"黃隊"},TC={red:"#e53935",blue:"#1e88e5",green:"#43a047",yellow:"#fdd835"};
   function avg(t){return t.avg.toFixed(1)+" 下"}
   // swatch builds a list row led by a team-coloured dot.
@@ -229,8 +232,8 @@ button:disabled{opacity:.4;cursor:default}
       $("start").disabled=!s.players.length;
       botBtns[0].disabled=botBtns[1].disabled=s.players.length>=100;
       lit("modes",s.mode);lit("durs",s.durationMs);lit("targets",s.target);lit("caps",s.timeCapMs);
-      var tr=s.mode.slice(-4)=="race";
-      show("timedOpts",!tr);show("raceOpts",tr);show("capOpts",isRace(s));show("shuffle",isTeam(s));
+      var tr=isRaceMode(s);
+      show("timedOpts",!tr);show("raceOpts",tr);show("capOpts",isIndividualRace(s));show("shuffle",isTeam(s));
     }
     show("end",s.phase=="racing");
     if(s.phase!="lobby")last="";
@@ -238,7 +241,7 @@ button:disabled{opacity:.4;cursor:default}
     if(live){
       var ol=$("top");ol.textContent="";
       $("boardh").textContent=isTeam(s)?"⭐ MVP Top 5":"即時排行 Top 15";
-      (isTeam(s)?s.mvp||[]:s.top).forEach(function(p){var li=document.createElement("li"),txt=p.name+"　"+(isRace(s)?score(p):p.total);if(isTeam(s))swatch(li,p.team,txt);else li.textContent=txt;ol.appendChild(li)});
+      (isTeam(s)?s.mvp||[]:s.top).forEach(function(p){var li=document.createElement("li"),txt=p.name+"　"+(isIndividualRace(s)?score(p):p.total);if(isTeam(s))swatch(li,p.team,txt);else li.textContent=txt;ol.appendChild(li)});
     }
     if(s.phase=="results"&&prev!="results"){if(isTeam(s))teamPodium(s);else podium(s.top);if(prev)sfx.fanfare()}
     show("resth",s.phase=="results"&&isTeam(s));
@@ -288,7 +291,7 @@ button:disabled{opacity:.4;cursor:default}
     var dt=Math.min(.1,(t-lastFrame)/1000);lastFrame=t;
     if(!snap)return;
     var ph=snap.phase,now=sNow(),live=ph=="countdown"||ph=="racing";
-    var race=isRace(snap),endAt=snap.startAt+(race?snap.timeCapMs:snap.durationMs);
+    var race=isIndividualRace(snap),endAt=snap.startAt+(race?snap.timeCapMs:snap.durationMs);
     var go=live&&now>=snap.startAt;
     if(ph=="countdown"&&!go){
       var n=Math.max(1,Math.ceil((snap.startAt-now)/1000));
@@ -354,7 +357,7 @@ button:disabled{opacity:.4;cursor:default}
     for(i=0;i<ps.length;i++)if(!ps[i].waiting)run.push(ps[i]);
     var n=run.length,nl=Math.max(1,Math.min(n,20)),max=0;
     for(i=0;i<n;i++)if(run[i].total>max)max=run[i].total;
-    var race=isRace(snap),L=lanes(nl,race?120:60),scale=race?snap.target:Math.max(20,max*1.15);
+    var race=isIndividualRace(snap),L=lanes(nl,race?120:60),scale=race?snap.target:Math.max(20,max*1.15);
     if(race)flag(L.x1+12,L.h,10);
     var named={},top=snap.top||[];
     for(i=0;i<top.length&&i<NAMED;i++)named[top[i].id]=1;

@@ -157,7 +157,7 @@ func (e *Engine) Snapshot() Snapshot {
 	now := e.sync()
 	s := Snapshot{At: now, Phase: e.phase, Config: e.config, Players: make([]Player, len(e.players)), Top: e.top(), Teams: e.teams()}
 	if s.Teams != nil && len(s.Top) > 0 {
-		s.MVP = s.Top[:min(len(s.Top), MVPN)]
+		s.MVP = s.Top[:min(len(s.Top), MVPTop)]
 	}
 	if e.phase != PhaseLobby {
 		s.Round = e.round

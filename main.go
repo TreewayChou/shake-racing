@@ -74,7 +74,7 @@ func run(cfg config) error {
 	tun := publishJoinURLs(cfg, srv, func() string { return serveLAN(hs, cfg.Port) })
 	if !wantsTunnel(cfg) {
 		for _, ip := range lanIPs() {
-			log.Printf("players (LAN): http://%s/play", net.JoinHostPort(ip, fmt.Sprint(cfg.Port)))
+			log.Printf("players (LAN): http://%s/play", hostPort(ip, cfg.Port))
 		}
 	}
 
@@ -140,7 +140,7 @@ func openKiosk(port int) *kiosk.Browser {
 func serveLAN(hs *http.Server, port int) string {
 	var first string
 	for _, ip := range lanIPs() {
-		ln, err := net.Listen("tcp", net.JoinHostPort(ip, fmt.Sprint(port)))
+		ln, err := net.Listen("tcp", hostPort(ip, port))
 		if err != nil {
 			log.Printf("LAN fallback: %v", err)
 			continue
@@ -154,6 +154,9 @@ func serveLAN(hs *http.Server, port int) string {
 	}
 	return first
 }
+
+// hostPort joins ip and port the way net.Dial/Listen want it.
+func hostPort(ip string, port int) string { return net.JoinHostPort(ip, fmt.Sprint(port)) }
 
 // lanIPs returns this machine's non-loopback IPv4 addresses.
 func lanIPs() []string {

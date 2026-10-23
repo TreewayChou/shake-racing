@@ -40,13 +40,7 @@ func (s *Server) joinLocked(ph *phone, m joinMsg) error {
 	switch snap.Phase {
 	case game.PhaseCountdown, game.PhaseRacing, game.PhaseGrace:
 		r := snap.Round
-		ph.c.send(mustJSON(countdownMsg{
-			Type:        "countdown",
-			StartAt:     ph.toLocal(r.StartAt),
-			modeOptions: newModeOptions(r.Config),
-			Total:       p.Total,
-			FinishedMs:  p.Finish.Milliseconds(),
-		}))
+		ph.c.send(mustJSON(newCountdownMsg(ph, r, p.Total, p.Finish)))
 		if snap.Phase == game.PhaseGrace {
 			ph.c.send(mustJSON(endMsg{Type: "end"}))
 		}
