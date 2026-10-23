@@ -81,10 +81,13 @@ func (p *Phone) SyncClock(n int, offset time.Duration) {
 
 // Countdown announces the round's absolute start moment.
 type Countdown struct {
-	StartAt    int64 `json:"startAt"`    // on the receiving phone's own clock, Unix ms
-	DurationMs int64 `json:"durationMs"` // timed modes
-	Target     int   `json:"target"`     // race modes
-	TimeCapMs  int64 `json:"timeCapMs"`  // individual race
+	StartAt    int64 `json:"startAt"`     // on the receiving phone's own clock, Unix ms
+	DurationMs int64 `json:"durationMs"`  // timed modes
+	Target     int   `json:"target"`      // race modes
+	TimeCapMs  int64 `json:"timeCapMs"`   // individual race
+	Total      int   `json:"totalShakes"` // accepted so far; non-zero when resuming after a reconnect
+	FinishedMs int64 `json:"finishedMs"`  // race finish time kept, when resuming after a reconnect
+
 }
 
 // ExpectCountdown waits for the next countdown message.

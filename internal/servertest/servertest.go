@@ -57,6 +57,9 @@ func (h *Harness) Advance(d time.Duration) { h.Clock.Advance(d) }
 // TickInterval is the host snapshot cadence.
 const TickInterval = server.BroadcastInterval
 
+// HeartbeatInterval is how often the server pings every phone.
+const HeartbeatInterval = server.HeartbeatInterval
+
 // Tick advances the clock by one broadcast interval.
 func (h *Harness) Tick() { h.Clock.Advance(server.BroadcastInterval) }
 
@@ -148,6 +151,7 @@ func (h *Harness) Phone() *Phone {
 // Welcome is the server's reply to a successful join.
 type Welcome struct {
 	PlayerID  string   `json:"playerId"`
+	Name      string   `json:"name"` // as shown on the host, deduplicated
 	Constants Detector `json:"constants"`
 }
 
@@ -220,8 +224,12 @@ type SnapshotPlayer struct {
 	Total int    `json:"total"`
 	Rank  int    `json:"rank,omitempty"` // set in top
 
+	Offline bool `json:"offline,omitempty"` // missed 2 heartbeats; still in the roster
+	Waiting bool `json:"waiting,omitempty"` // joined mid-round; races in the next one
+
 	Finished  bool  `json:"finished"`  // race: reached the target
 	ElapsedMs int64 `json:"elapsedMs"` // race: phone-measured finish time
+
 }
 
 // WaitSnapshot reads snapshots until one satisfies ok, and returns it.

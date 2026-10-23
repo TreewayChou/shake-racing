@@ -14,6 +14,11 @@ h1{margin:0;font-size:48px}
 #cards{display:flex;flex-wrap:wrap;gap:12px;padding:16px 40px}
 .card{background:#2a3aa8;border-radius:12px;padding:12px 20px;font-size:24px;font-weight:600}
 .card.pulse{animation:pulse .35s ease-out}
+.card.off{opacity:.5}
+.card small{font-size:16px;color:#ffcc00}
+.card .kick{margin-left:10px;padding:2px 8px;font-size:16px;background:rgba(255,255,255,.15)}
+.card .kick:hover{background:#c62828}
+#reset{position:fixed;right:16px;bottom:16px;z-index:2;font-size:18px;padding:8px 16px;opacity:.7}
 #join{display:flex;align-items:center;gap:32px;margin:0 40px;padding:24px;background:#fff;color:#10164a;border-radius:20px}
 #qr{width:280px;height:280px;flex:none}
 #qr[hidden]{display:none}
@@ -59,6 +64,7 @@ button:disabled{opacity:.4;cursor:default}
 <button id="end" class="hide">結束</button>
 <div id="results" class="hide"><h2>🏆 本場結果</h2><div id="podium"></div><ol id="rest"></ol><button id="again" class="big" style="margin:0">再來一場</button></div>
 <div id="overlay" class="hide"></div>
+<button id="reset" title="回到大廳（R 鍵）">↺ 重設（R）</button>
 <script>
 (function(){
   var $=function(i){return document.getElementById(i)};
@@ -68,13 +74,19 @@ button:disabled{opacity:.4;cursor:default}
 
   // Lobby: name cards, warm-up pulses, join QR/URL and settings.
   function renderCards(s){
-    var key=s.players.map(function(p){return p.id}).join(",");
+    var key=s.players.map(function(p){return p.id+(p.offline?"-":"")}).join(",");
     if(key===last)return;
     last=key;
     cards.textContent="";
     s.players.forEach(function(p){
       var d=document.createElement("div");
-      d.className="card";d.textContent=p.name;d.dataset.id=p.id;
+      d.className="card"+(p.offline?" off":"");d.dataset.id=p.id;
+      d.appendChild(document.createTextNode(p.name));
+      if(p.offline){var o=document.createElement("small");o.textContent=" 離線";d.appendChild(o)}
+      var k=document.createElement("button");
+      k.className="kick";k.textContent="✕";k.title="移出 "+p.name;
+      k.onclick=function(){send({type:"kick",id:p.id})};
+      d.appendChild(k);
       cards.appendChild(d);
     });
   }
@@ -117,7 +129,12 @@ button:disabled{opacity:.4;cursor:default}
   $("start").onclick=start;
   $("end").onclick=function(){send({type:"end"})};
   $("again").onclick=function(){send({type:"again"})};
-  addEventListener("keydown",function(e){if(e.code=="Space"){e.preventDefault();start()}});
+  function reset(){send({type:"reset"})}
+  $("reset").onclick=function(){this.blur();reset()};
+  addEventListener("keydown",function(e){
+    if(e.code=="Space"){e.preventDefault();start()}
+    else if(e.code=="KeyR"&&!e.ctrlKey&&!e.metaKey){reset()}
+  });
 
   // Server time: snapshots carry serverNow. The freshest-looking sample
   // (largest serverNow - Date.now()) has the least network delay in it.
@@ -127,7 +144,9 @@ button:disabled{opacity:.4;cursor:default}
     var d=s.serverNow-Date.now();
     off=off==null||d>off?d:off+(d-off)*0.02;
     var prev=snap&&snap.phase;snap=s;
-    count.textContent=s.players.length+" 人已加入";
+    var online=0,waiting=0;
+    s.players.forEach(function(p){if(!p.offline)online++;if(p.waiting)waiting++});
+    count.textContent=s.players.length+" 人已加入 · "+online+" 人在線"+(waiting?" · "+waiting+" 人等待下一場":"");
     show("lobby",s.phase=="lobby");
     show("race",s.phase=="countdown"||s.phase=="racing"||s.phase=="grace");
     show("results",s.phase=="results");
@@ -181,7 +200,7 @@ button:disabled{opacity:.4;cursor:default}
     var w=cv.clientWidth,h=cv.clientHeight,r=devicePixelRatio||1;
     if(cv.width!=w*r||cv.height!=h*r){cv.width=w*r;cv.height=h*r}
     cx.setTransform(r,0,0,r,0,0);cx.clearRect(0,0,w,h);
-    var ps=snap.players,n=ps.length,lanes=Math.max(1,Math.min(n,20)),lh=h/lanes;
+    var ps=snap.players.filter(function(p){return !p.waiting}),n=ps.length,lanes=Math.max(1,Math.min(n,20)),lh=h/lanes;
     var max=0;ps.forEach(function(p){if(p.total>max)max=p.total});
     // Race: the track is the target long, ending at a checkered finish line.
     var race=isRace(snap),scale=race?snap.target:Math.max(20,max*1.15),x0=24,x1=w-90;

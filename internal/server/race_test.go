@@ -226,6 +226,39 @@ func TestHostEndsATimedRoundEarly(t *testing.T) {
 	}
 }
 
+func TestLateJoinerNeitherHoldsUpNorJoinsTheRace(t *testing.T) {
+	r := startIndividualRace(t, 100, 90000, "甲")
+	late := r.h.Phone()
+	late.Join("遲到")
+	late.ExpectWait()
+
+	r.advanceTo(12000)
+	r.phones[0].Finish(100, 11000)
+
+	r.phones[0].ExpectEnd()
+	r.advanceTo(12000 + graceMs)
+	if res := r.phones[0].ExpectResult(); res.Rank != 1 || res.Players != 1 || !res.Finished {
+		t.Errorf("result = %+v, want rank 1 of 1, finished", res)
+	}
+}
+
+func TestReconnectAfterFinishingKeepsTheFinish(t *testing.T) {
+	r := startIndividualRace(t, 100, 90000, "甲", "乙")
+	r.advanceTo(12000)
+	r.phones[0].Finish(100, 11000)
+	r.phones[0].Echo()
+
+	again := r.h.Phone()
+	again.Rejoin("甲", r.ids[0])
+	if cd := again.ExpectCountdown(); cd.Total != 100 || cd.FinishedMs != 11000 || cd.Target != 100 {
+		t.Errorf("resumed countdown = %+v, want total 100 finished at 11000 target 100", cd)
+	}
+	r.advanceTo(90000 + graceMs)
+	if res := again.ExpectResult(); res.Rank != 1 || !res.Finished || res.ElapsedMs != 11000 {
+		t.Errorf("result = %+v, want rank 1 finished in 11000 ms", res)
+	}
+}
+
 func TestFinishFasterThanTheShakeRateIsNotAFinish(t *testing.T) {
 	r := startIndividualRace(t, 100, 60000, "小明")
 	p := r.phones[0]

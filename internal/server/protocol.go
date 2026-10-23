@@ -69,6 +69,7 @@ type pingMsg struct {
 type welcomeMsg struct {
 	Type      string      `json:"type"` // "welcome"
 	PlayerID  string      `json:"playerId"`
+	Name      string      `json:"name"` // deduplicated; the kept name on a reconnect
 	Constants detectorMsg `json:"constants"`
 }
 
@@ -118,6 +119,15 @@ type countdownMsg struct {
 	Type    string `json:"type"` // "countdown"
 	StartAt int64  `json:"startAt"`
 	modeOptions
+	Total int `json:"totalShakes,omitempty"` // score kept, when resuming after a reconnect
+	// Race finish kept, when resuming after a reconnect.
+	FinishedMs int64 `json:"finishedMs,omitempty"`
+}
+
+// signalMsg is a message with no payload: wait (joined mid-round, races
+// in the next one), full (room at capacity) or kicked (removed by the host).
+type signalMsg struct {
+	Type string `json:"type"`
 }
 
 type errorMsg struct {
@@ -134,6 +144,11 @@ type setConfigMsg struct {
 	DurationMs *int64  `json:"durationMs"`
 	Target     *int    `json:"target"`
 	TimeCapMs  *int64  `json:"timeCapMs"`
+}
+
+// kickMsg removes a player from the roster.
+type kickMsg struct {
+	ID string `json:"id"`
 }
 
 // Server -> host.
@@ -173,6 +188,9 @@ type snapshotPlayer struct {
 	Total int    `json:"total"`
 	Rank  int    `json:"rank,omitempty"`
 
+	Offline bool `json:"offline,omitempty"` // missed 2 heartbeats
+	Waiting bool `json:"waiting,omitempty"` // joined mid-round
+
 	Finished  bool  `json:"finished,omitempty"`  // race: reached the target
 	ElapsedMs int64 `json:"elapsedMs,omitempty"` // race: phone-measured finish time
 }
@@ -181,4 +199,12 @@ type snapshotPlayer struct {
 func (sp snapshotPlayer) withFinish(p game.Player) snapshotPlayer {
 	sp.Finished, sp.ElapsedMs = p.Finished, p.Finish.Milliseconds()
 	return sp
+}
+
+// newResultMsg is a participant's final standing among n ranked.
+func newResultMsg(st game.Standing, n int) resultMsg {
+	return resultMsg{
+		Type: "result", Rank: st.Rank, TotalShakes: st.Total, Players: n,
+		Finished: st.Finished, ElapsedMs: st.Finish.Milliseconds(),
+	}
 }
