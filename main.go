@@ -12,9 +12,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
+	"racing/internal/kiosk"
 	"racing/internal/server"
 )
 
@@ -65,11 +67,9 @@ func run(cfg config) error {
 		return err
 	}
 	srv := server.New(server.Options{})
-	defer srv.Close()
 	hs := &http.Server{Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 
-	// Tunnel and kiosk arrive in later milestones; until then the server
-	// always runs LAN-only and headless.
+	// Tunnel arrives in a later milestone; until then the server runs LAN-only.
 	log.Printf("host screen: http://localhost:%d/host", cfg.Port)
 	if cfg.PublicURL != "" {
 		log.Printf("players:     %s/play", cfg.PublicURL)
@@ -80,15 +80,55 @@ func run(cfg config) error {
 
 	errc := make(chan error, 1)
 	go func() { errc <- hs.Serve(ln) }()
-	select {
-	case err := <-errc:
-		return err
-	case <-ctx.Done():
+
+	var browser *kiosk.Browser
+	var browserExited <-chan struct{}
+	if !cfg.NoKiosk {
+		if browser = openKiosk(cfg.Port); browser != nil {
+			browserExited = browser.Exited()
+		}
 	}
-	log.Print("shutting down")
-	shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	return hs.Shutdown(shutCtx)
+
+	reason, serveErr := waitForStop(ctx, browserExited, errc)
+	if serveErr != nil {
+		return serveErr
+	}
+	log.Printf("shutting down (%s)", reason)
+	// Closed in order: kiosk window, HTTP server, game server.
+	closers := []io.Closer{
+		closerFunc(func() error {
+			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			return hs.Shutdown(shutCtx)
+		}),
+		closerFunc(func() error { srv.Close(); return nil }),
+	}
+	if browser != nil {
+		closers = append([]io.Closer{browser}, closers...)
+	}
+	return shutdown(closers...)
+}
+
+// openKiosk opens the host screen in a dedicated full-screen browser window.
+// It returns nil, after printing the host URL, when no browser can be started.
+func openKiosk(port int) *kiosk.Browser {
+	hostURL := fmt.Sprintf("http://127.0.0.1:%d/host", port)
+	path, ok := kiosk.FindBrowser(kiosk.DefaultSystem())
+	if !ok {
+		log.Printf("no Chrome/Chromium/Edge found; open the host screen manually: %s", hostURL)
+		return nil
+	}
+	cache, err := os.UserCacheDir()
+	if err != nil {
+		cache = os.TempDir()
+	}
+	b, err := kiosk.Launch(path, hostURL, filepath.Join(cache, "racing", "kiosk-profile"))
+	if err != nil {
+		log.Printf("could not start %s (%v); open the host screen manually: %s", path, err, hostURL)
+		return nil
+	}
+	log.Printf("kiosk: %s", path)
+	return b
 }
 
 // lanIPs returns this machine's non-loopback IPv4 addresses.
