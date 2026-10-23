@@ -281,6 +281,36 @@ func TestAgainKeepsTeams(t *testing.T) {
 	}
 }
 
+func TestBotsPlayATeamRace(t *testing.T) {
+	h := servertest.Start(t)
+	host := h.Host()
+	host.SetConfig(map[string]any{"mode": "team-race", "target": 100})
+	host.Bots("add")
+	s := host.WaitPlayers(h, 10)
+	if n := teamSizes(s); n["red"] != 3 || n["blue"] != 3 || n["green"] != 2 || n["yellow"] != 2 {
+		t.Fatalf("10 bots: team sizes = %v, want red 3 blue 3 green 2 yellow 2", n)
+	}
+
+	host.Start()
+
+	s = host.WaitPhase(h, "results")
+	if len(s.MVP) != 5 {
+		t.Errorf("MVP has %d players, want 5", len(s.MVP))
+	}
+	winners := 0
+	for _, ts := range s.Teams {
+		if ts.Rank == 1 {
+			winners++
+			if ts.Avg < 100 {
+				t.Errorf("winner %s avg %.1f, want at least the target", ts.Team, ts.Avg)
+			}
+		}
+	}
+	if winners != 1 {
+		t.Errorf("teams = %+v, want exactly one winner", s.Teams)
+	}
+}
+
 func TestIndividualModesCarryNoTeamAggregates(t *testing.T) {
 	r := startRace(t, 15000, "甲", "乙")
 	if s := r.host.NextSnapshot(r.h); len(s.Teams) != 0 || len(s.MVP) != 0 {

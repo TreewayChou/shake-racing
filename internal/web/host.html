@@ -40,6 +40,8 @@ button:disabled{opacity:.4;cursor:default}
 #board li{padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #timer{position:fixed;top:20px;left:50%;transform:translateX(-50%);font-size:56px;font-weight:800;color:#ffcc00}
 #end{position:fixed;top:24px;right:40px;background:#e53935;font-size:28px}
+#botbar{display:flex;align-items:center;gap:10px;padding:0 40px 8px;font-size:18px;opacity:.8}
+#botbar button{font-size:18px;padding:6px 14px}
 #settings>span{display:inline-flex;align-items:center;gap:8px;margin-right:16px}
 #overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(16,22,74,.6);font-size:220px;font-weight:900;color:#ffcc00;text-shadow:0 8px 24px #000}
 #overlay.small{font-size:96px}
@@ -57,6 +59,7 @@ button:disabled{opacity:.4;cursor:default}
 <div id="lobby">
 <section id="join"><img id="qr" alt="加入 QR Code" hidden><div><div id="joinhint">掃描 QR Code 加入遊戲</div><div id="joinurl">取得網址中…</div><div id="warn"></div></div></section>
 <div id="settings"><span id="modes"></span><span id="timedOpts">時間：<span id="durs"></span></span><span id="raceOpts">目標：<span id="targets"></span></span><span id="capOpts">上限：<span id="caps"></span></span><button id="shuffle" class="hide">🔀 重新隨機分隊</button><button id="start" class="big" disabled>開始（空白鍵）</button></div>
+<div id="botbar">排練：<button data-bots="add">+10 機器人</button><button data-bots="fill">補滿 100 人</button><button data-bots="clear">清除機器人</button></div>
 <div id="cards"></div>
 </div>
 <div id="race" class="hide"><canvas id="track"></canvas><div id="board"><h2 id="boardh">即時排行 Top 15</h2><ol id="top"></ol></div></div>
@@ -136,6 +139,9 @@ button:disabled{opacity:.4;cursor:default}
   $("start").onclick=start;
   $("end").onclick=function(){send({type:"end"})};
   $("again").onclick=function(){send({type:"again"})};
+  // Rehearsal bots: +10, fill to the 100 cap, clear.
+  var botBtns=$("botbar").querySelectorAll("button");
+  Array.prototype.forEach.call(botBtns,function(b){b.onclick=function(){this.blur();send({type:"bots",action:b.dataset.bots})}});
   function reset(){send({type:"reset"})}
   $("reset").onclick=function(){this.blur();reset()};
   addEventListener("keydown",function(e){
@@ -160,6 +166,7 @@ button:disabled{opacity:.4;cursor:default}
     if(s.phase=="lobby"){
       renderCards(s);
       $("start").disabled=!s.players.length;
+      botBtns[0].disabled=botBtns[1].disabled=s.players.length>=100;
       lit("modes",s.mode);lit("durs",s.durationMs);lit("targets",s.target);lit("caps",s.timeCapMs);
       var tr=s.mode.slice(-4)=="race";
       show("timedOpts",!tr);show("raceOpts",tr);show("capOpts",isRace(s));show("shuffle",isTeam(s));

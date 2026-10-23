@@ -175,6 +175,8 @@ func (s *Server) hostMessage(typ string, data []byte) {
 		}
 	case "end":
 		s.engine.End()
+	case "bots":
+		s.botsLocked(data)
 	case "kick":
 		var m kickMsg
 		if json.Unmarshal(data, &m) == nil {

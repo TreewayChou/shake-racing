@@ -15,6 +15,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"racing/internal/bots"
 	"racing/internal/clock"
 	"racing/internal/server"
 )
@@ -39,13 +40,24 @@ type Harness struct {
 func Start(t testing.TB) *Harness {
 	t.Helper()
 	fc := clock.NewFake(Epoch)
-	srv := server.New(server.Options{Clock: fc})
+	h := StartWith(t, server.Options{Clock: fc, Bots: &bots.Config{Sim: bots.Sim{RateMin: BotRate, RateMax: BotRate}, Seed: 1}})
+	h.Clock = fc
+	return h
+}
+
+// StartWith launches a server with the given options on a loopback port,
+// with its bot controls enabled. Harness.Clock is nil; tests that need a
+// fake clock use Start.
+func StartWith(t testing.TB, opts server.Options) *Harness {
+	t.Helper()
+	srv := server.New(opts)
 	hs := httptest.NewServer(srv)
+	srv.SetBotURL(hs.URL)
 	t.Cleanup(func() {
 		srv.Close()
 		hs.Close()
 	})
-	return &Harness{T: t, Clock: fc, Server: srv, HTTP: hs}
+	return &Harness{T: t, Server: srv, HTTP: hs}
 }
 
 // URL returns the absolute http URL for path.
