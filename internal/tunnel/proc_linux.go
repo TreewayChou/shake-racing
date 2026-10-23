@@ -10,3 +10,5 @@ import (
 func setProcAttr(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 }
+
+func afterStart(*exec.Cmd) {}

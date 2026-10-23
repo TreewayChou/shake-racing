@@ -30,6 +30,7 @@ func Start(ctx context.Context, bin, localURL string) (*Tunnel, error) {
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("tunnel: start cloudflared: %w", err)
 	}
+	afterStart(cmd)
 	t := &Tunnel{cmd: cmd, done: make(chan struct{})}
 
 	found := make(chan string, 1)
