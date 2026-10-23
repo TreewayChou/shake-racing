@@ -50,7 +50,7 @@ h1{margin:0;font-size:48px}
     var u=m.public||m.lan;
     joinurl.textContent=u||(m.tunnelMode=="pending"?"建立公開網址中…":"找不到可用網址");
     if(u){qr.src="/qr.png?u="+encodeURIComponent(u);qr.hidden=false}else qr.hidden=true;
-    warn.textContent=m.tunnelMode=="pending"?"公開網址建立中，暫時顯示區域網路網址…":
+    warn.textContent=m.tunnelMode=="pending"?(u?"公開網址建立中，暫時顯示區域網路網址…":""):
       m.tunnelMode=="failed"?"⚠ 無法建立 Cloudflare 通道，改用區域網路網址：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":
       m.tunnelMode=="lan"?"⚠ 區域網路模式：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":"";
   }
