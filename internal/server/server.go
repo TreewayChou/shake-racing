@@ -4,6 +4,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -55,7 +56,7 @@ func New(opts Options) *Server {
 		cancel: cancel,
 	}
 	s.mux = http.NewServeMux()
-	s.mux.Handle("GET /play", page(web.Play))
+	s.mux.Handle("GET /play", page(playPage(game.DefaultDetector)))
 	s.mux.Handle("GET /host", hostOnly(page(web.Host)))
 	s.mux.HandleFunc("GET /ws/play", s.servePhone)
 	s.mux.Handle("GET /ws/host", hostOnly(http.HandlerFunc(s.serveHost)))
@@ -65,6 +66,18 @@ func New(opts Options) *Server {
 	s.wg.Add(1)
 	go s.broadcast(ticker)
 	return s
+}
+
+// constantsPlaceholder marks where the phone page expects its detector
+// constants: `var K=__K__;`.
+var constantsPlaceholder = []byte("__K__")
+
+// playPage returns the phone page with the detector constants injected.
+func playPage(d game.Detector) []byte {
+	if bytes.Count(web.Play, constantsPlaceholder) != 1 {
+		panic("server: play.html must contain exactly one __K__ placeholder")
+	}
+	return bytes.Replace(web.Play, constantsPlaceholder, mustJSON(newDetectorMsg(d)), 1)
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
@@ -112,12 +125,17 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer c.close()
+	var playerID string // set once this connection has joined
 	for {
 		typ, data, err := c.read()
 		if err != nil {
 			return
 		}
 		switch typ {
+		case "warmup":
+			if playerID != "" {
+				s.warmup(playerID)
+			}
 		case "join":
 			var m joinMsg
 			if json.Unmarshal(data, &m) != nil {
@@ -130,8 +148,23 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 				c.send(mustJSON(errorMsg{Type: "error", Reason: "name"}))
 				continue
 			}
-			c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID}))
+			playerID = p.ID
+			c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID, Constants: newDetectorMsg(game.DefaultDetector)}))
 		}
+	}
+}
+
+// warmup relays a lobby warm-up shake to every host immediately, outside
+// the 10 Hz snapshot cadence, so the player's card pulses right away.
+func (s *Server) warmup(id string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !s.engine.Warmup(id) {
+		return
+	}
+	msg := mustJSON(warmupMsg{Type: "warmup", ID: id})
+	for h := range s.hosts {
+		h.send(msg)
 	}
 }
 

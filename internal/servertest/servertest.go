@@ -144,7 +144,16 @@ func (h *Harness) Phone() *Phone {
 
 // Welcome is the server's reply to a successful join.
 type Welcome struct {
-	PlayerID string `json:"playerId"`
+	PlayerID  string   `json:"playerId"`
+	Constants Detector `json:"constants"`
+}
+
+// Detector is the phone shake-detector tuning supplied by the server.
+type Detector struct {
+	Accel      float64 `json:"accel"`      // |acceleration| threshold, m/s²
+	Delta      float64 `json:"delta"`      // fallback |Δ accelerationIncludingGravity| threshold
+	Rearm      float64 `json:"rearm"`      // re-arm below this fraction of the threshold
+	CooldownMs int     `json:"cooldownMs"` // minimum gap between counted shakes
 }
 
 // Error is a server rejection.
@@ -169,6 +178,12 @@ func (p *Phone) Join(name string) Welcome {
 	var w Welcome
 	m.Decode(p.t, &w)
 	return w
+}
+
+// Warmup sends a lobby warm-up shake.
+func (p *Phone) Warmup() {
+	p.t.Helper()
+	p.Send(map[string]any{"type": "warmup"})
 }
 
 // Host is a client on the host endpoint.
@@ -202,6 +217,17 @@ func (h *Host) WaitSnapshot(ok func(Snapshot) bool) Snapshot {
 			return s
 		}
 	}
+}
+
+// ExpectWarmup waits for the next warmup{id} event, skipping snapshots,
+// and returns the player id.
+func (h *Host) ExpectWarmup() string {
+	h.t.Helper()
+	var w struct {
+		ID string `json:"id"`
+	}
+	h.Expect("warmup").Decode(h.t, &w)
+	return w.ID
 }
 
 // ServeFrom sends a GET for path straight to the server's handler as if it

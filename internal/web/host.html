@@ -13,6 +13,8 @@ h1{margin:0;font-size:48px}
 #status{padding:0 40px;color:#ffcc00;min-height:1.5em}
 #cards{display:flex;flex-wrap:wrap;gap:12px;padding:16px 40px}
 .card{background:#2a3aa8;border-radius:12px;padding:12px 20px;font-size:24px;font-weight:600}
+.card.pulse{animation:pulse .35s ease-out}
+@keyframes pulse{0%{transform:scale(1.18);background:#ffcc00;color:#222}100%{transform:scale(1)}}
 </style>
 </head>
 <body>
@@ -34,10 +36,16 @@ h1{margin:0;font-size:48px}
       cards.appendChild(d);
     });
   }
+  // pulse flashes a player's card on a lobby warm-up shake.
+  function pulse(id){
+    var d=cards.querySelector('[data-id="'+id+'"]');
+    if(!d)return;
+    d.classList.remove("pulse");void d.offsetWidth;d.classList.add("pulse");
+  }
   function connect(){
     var ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/host");
     ws.onopen=function(){status.textContent=""};
-    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")render(m)};
+    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")render(m);else if(m.type=="warmup")pulse(m.id)};
     ws.onclose=function(){status.textContent="與伺服器斷線，重新連線中…";setTimeout(connect,1000)};
   }
   connect();
