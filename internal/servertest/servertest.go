@@ -54,6 +54,9 @@ func (h *Harness) URL(path string) string { return h.HTTP.URL + path }
 // Advance moves the fake clock forward.
 func (h *Harness) Advance(d time.Duration) { h.Clock.Advance(d) }
 
+// TickInterval is the host snapshot cadence.
+const TickInterval = server.BroadcastInterval
+
 // Tick advances the clock by one broadcast interval.
 func (h *Harness) Tick() { h.Clock.Advance(server.BroadcastInterval) }
 
@@ -197,14 +200,23 @@ func (h *Harness) Host() *Host {
 
 // Snapshot is the host's periodic view of the room.
 type Snapshot struct {
-	Phase   string           `json:"phase"`
-	Players []SnapshotPlayer `json:"players"`
+	Phase      string           `json:"phase"`
+	Mode       string           `json:"mode"`
+	DurationMs int64            `json:"durationMs"`
+	ServerNow  int64            `json:"serverNow"` // server clock, Unix ms
+	StartAt    int64            `json:"startAt"`   // server clock, Unix ms; 0 in the lobby
+	EndAt      int64            `json:"endAt"`     // racing end, server clock; 0 until known
+	GraceMs    int64            `json:"graceMs"`
+	Players    []SnapshotPlayer `json:"players"`
+	Top        []SnapshotPlayer `json:"top"` // live (or, in results, final) ranking, at most 15
 }
 
 // SnapshotPlayer is one roster entry in a snapshot.
 type SnapshotPlayer struct {
-	ID   string `json:"id"`
-	Name string `json:"name"`
+	ID    string `json:"id"`
+	Name  string `json:"name"`
+	Total int    `json:"total"`
+	Rank  int    `json:"rank,omitempty"` // set in top
 }
 
 // WaitSnapshot reads snapshots until one satisfies ok, and returns it.

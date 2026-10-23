@@ -34,9 +34,13 @@ type Options struct {
 type Server struct {
 	mux *http.ServeMux
 
+	clock clock.Clock
+
 	mu     sync.Mutex
 	engine *game.Engine
 	hosts  map[*conn]struct{}
+	phones  map[*phone]struct{} // joined phones
+	pingSeq int64
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -50,8 +54,10 @@ func New(opts Options) *Server {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &Server{
+		clock:  opts.Clock,
 		engine: game.New(opts.Clock),
 		hosts:  make(map[*conn]struct{}),
+		phones: make(map[*phone]struct{}),
 		ctx:    ctx,
 		cancel: cancel,
 	}
@@ -65,6 +71,9 @@ func New(opts Options) *Server {
 	ticker := opts.Clock.NewTicker(BroadcastInterval)
 	s.wg.Add(1)
 	go s.broadcast(ticker)
+	hb := opts.Clock.NewTicker(HeartbeatInterval)
+	s.wg.Add(1)
+	go s.heartbeat(hb)
 	return s
 }
 
@@ -97,7 +106,8 @@ func (s *Server) broadcast(t clock.Ticker) {
 			return
 		case <-t.C():
 			s.mu.Lock()
-			msg := s.snapshotLocked()
+			msg := s.snapshotLocked() // also advances the round's phases
+			s.dispatchLocked()
 			hosts := make([]*conn, 0, len(s.hosts))
 			for h := range s.hosts {
 				hosts = append(hosts, h)
@@ -110,22 +120,18 @@ func (s *Server) broadcast(t clock.Ticker) {
 	}
 }
 
-func (s *Server) snapshotLocked() []byte {
-	snap := s.engine.Snapshot()
-	msg := snapshotMsg{Type: "snapshot", Phase: string(snap.Phase), Players: make([]snapshotPlayer, len(snap.Players))}
-	for i, p := range snap.Players {
-		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name}
-	}
-	return mustJSON(msg)
-}
-
 func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 	c, err := s.accept(w, r)
 	if err != nil {
 		return
 	}
 	defer c.close()
-	var playerID string // set once this connection has joined
+	ph := &phone{c: c} // ph.id is set once this connection has joined
+	defer func() {
+		s.mu.Lock()
+		delete(s.phones, ph)
+		s.mu.Unlock()
+	}()
 	for {
 		typ, data, err := c.read()
 		if err != nil {
@@ -133,23 +139,31 @@ func (s *Server) servePhone(w http.ResponseWriter, r *http.Request) {
 		}
 		switch typ {
 		case "warmup":
-			if playerID != "" {
-				s.warmup(playerID)
+			if ph.id != "" {
+				s.warmup(ph.id)
 			}
 		case "join":
 			var m joinMsg
-			if json.Unmarshal(data, &m) != nil {
+			if ph.id != "" || json.Unmarshal(data, &m) != nil {
 				continue
 			}
 			s.mu.Lock()
 			p, err := s.engine.Join(m.Name)
+			if err == nil {
+				ph.id = p.ID
+				s.phones[ph] = struct{}{}
+				c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID, Constants: newDetectorMsg(game.DefaultDetector)}))
+				c.send(mustJSON(newConfigMsg(s.engine.Config())))
+				s.startClockSyncLocked(ph)
+			}
 			s.mu.Unlock()
 			if errors.Is(err, game.ErrInvalidName) {
 				c.send(mustJSON(errorMsg{Type: "error", Reason: "name"}))
-				continue
 			}
-			playerID = p.ID
-			c.send(mustJSON(welcomeMsg{Type: "welcome", PlayerID: p.ID, Constants: newDetectorMsg(game.DefaultDetector)}))
+		default:
+			if ph.id != "" {
+				s.phoneMessage(ph, typ, data)
+			}
 		}
 	}
 }
@@ -177,6 +191,7 @@ func (s *Server) serveHost(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.hosts[c] = struct{}{}
 	c.send(s.snapshotLocked())
+	s.dispatchLocked()
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
@@ -184,9 +199,11 @@ func (s *Server) serveHost(w http.ResponseWriter, r *http.Request) {
 		s.mu.Unlock()
 	}()
 	for {
-		if _, _, err := c.read(); err != nil {
+		typ, data, err := c.read()
+		if err != nil {
 			return
 		}
+		s.hostMessage(typ, data)
 	}
 }
 
@@ -254,6 +271,12 @@ func (c *conn) read() (string, []byte, error) {
 		}
 		var env envelope
 		if json.Unmarshal(data, &env) != nil || env.Type == "" {
+			continue
+		}
+		if env.Type == "echo" {
+			// Round-trip probe: replying from the read loop proves every
+			// earlier message on this connection has been handled.
+			c.send(mustJSON(echoMsg{Type: "echo", ID: env.ID}))
 			continue
 		}
 		return env.Type, data, nil

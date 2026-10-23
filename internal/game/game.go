@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"racing/internal/clock"
@@ -42,26 +43,55 @@ const (
 
 // Player is a roster entry as seen from outside the engine.
 type Player struct {
-	ID   string
-	Name string
+	ID    string
+	Name  string
+	Total int // shakes accepted this round
 }
 
-// Snapshot is a point-in-time view of the room.
+// entry is the engine's own roster record.
+type entry struct {
+	Player
+	seq     int           // join order, the last tie-break
+	inRound bool          // takes part in the current round
+	reached time.Duration // phone-elapsed time when Total was reached
+}
+
+// Snapshot is a point-in-time view of the room. Taking one advances the
+// phase state machine, so drain Events afterwards.
 type Snapshot struct {
+	At      time.Time // the moment the snapshot describes
 	Phase   Phase
+	Config  Config
+	Round   Round // zero in the lobby
 	Players []Player
+	Top     []Standing // live leaderboard, final in results; at most TopN
 }
 
 // Engine holds all game state for the single room.
 type Engine struct {
-	clock   clock.Clock
-	phase   Phase
-	players []*Player
+	clock     clock.Clock
+	phase     Phase
+	config    Config
+	round     Round // valid outside the lobby
+	rules     rules // the round's mode rules; valid outside the lobby
+	players   []*entry
+	joins     int
+	standings []Standing // final ranking, in results
+	events    []Event
 }
 
 // New returns an engine in the lobby phase.
 func New(c clock.Clock) *Engine {
-	return &Engine{clock: c, phase: PhaseLobby}
+	return &Engine{clock: c, phase: PhaseLobby, config: DefaultConfig}
+}
+
+func (e *Engine) find(id string) *entry {
+	for _, p := range e.players {
+		if p.ID == id {
+			return p
+		}
+	}
+	return nil
 }
 
 // Join adds a player with the given nickname and returns the new player.
@@ -70,31 +100,30 @@ func (e *Engine) Join(name string) (Player, error) {
 	if n := utf8.RuneCountInString(name); n < 1 || n > MaxNameLen {
 		return Player{}, ErrInvalidName
 	}
-	p := &Player{ID: newID(), Name: name}
+	e.sync()
+	e.joins++
+	p := &entry{Player: Player{ID: newID(), Name: name}, seq: e.joins}
 	e.players = append(e.players, p)
-	return *p, nil
+	return p.Player, nil
 }
 
 // Warmup reports whether a lobby warm-up shake from player id should be
 // shown on the host: the player must be in the roster and the room in the
 // lobby.
 func (e *Engine) Warmup(id string) bool {
-	if e.phase != PhaseLobby {
-		return false
-	}
-	for _, p := range e.players {
-		if p.ID == id {
-			return true
-		}
-	}
-	return false
+	e.sync()
+	return e.phase == PhaseLobby && e.find(id) != nil
 }
 
 // Snapshot returns the current room state.
 func (e *Engine) Snapshot() Snapshot {
-	s := Snapshot{Phase: e.phase, Players: make([]Player, len(e.players))}
+	now := e.sync()
+	s := Snapshot{At: now, Phase: e.phase, Config: e.config, Players: make([]Player, len(e.players)), Top: e.top()}
+	if e.phase != PhaseLobby {
+		s.Round = e.round
+	}
 	for i, p := range e.players {
-		s.Players[i] = *p
+		s.Players[i] = p.Player
 	}
 	return s
 }
