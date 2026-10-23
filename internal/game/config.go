@@ -13,19 +13,32 @@ const (
 	// IndividualTimed: every phone counts for exactly Duration from the
 	// synced start; ranked by total shakes.
 	IndividualTimed Mode = "individual-timed"
+
+	// IndividualRace: first to Target shakes; the round ends when the top
+	// TopN have finished, at TimeCap, or when the host ends it.
+	IndividualRace Mode = "individual-race"
 )
 
 // Durations are the timed-mode round lengths the host can pick.
 var Durations = []time.Duration{15 * time.Second, 30 * time.Second, 45 * time.Second, 60 * time.Second}
 
-// Config is the host's round configuration.
+// Targets are the race-mode shake targets the host can pick.
+var Targets = []int{100, 200, 300, 500}
+
+// TimeCaps are the individual-race time caps the host can pick.
+var TimeCaps = []time.Duration{60 * time.Second, 90 * time.Second, 120 * time.Second, 180 * time.Second}
+
+// Config is the host's round configuration. Every option is kept whatever
+// the mode, so switching modes back and forth keeps the host's picks.
 type Config struct {
 	Mode     Mode
 	Duration time.Duration // timed modes
+	Target   int           // race modes: shakes to finish
+	TimeCap  time.Duration // individual race: longest the round may run
 }
 
 // DefaultConfig is the configuration a new room starts with.
-var DefaultConfig = Config{Mode: IndividualTimed, Duration: 30 * time.Second}
+var DefaultConfig = Config{Mode: IndividualTimed, Duration: 30 * time.Second, Target: 200, TimeCap: 90 * time.Second}
 
 // ErrInvalidConfig is returned for a mode or option the host cannot pick.
 var ErrInvalidConfig = errors.New("game: invalid round configuration")
@@ -35,10 +48,11 @@ var ErrWrongPhase = errors.New("game: not allowed in this phase")
 
 func (c Config) valid() bool {
 	switch c.Mode {
-	case IndividualTimed:
-		return slices.Contains(Durations, c.Duration)
+	case IndividualTimed, IndividualRace:
+	default:
+		return false
 	}
-	return false
+	return slices.Contains(Durations, c.Duration) && slices.Contains(Targets, c.Target) && slices.Contains(TimeCaps, c.TimeCap)
 }
 
 // Config returns the current round configuration.

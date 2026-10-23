@@ -207,6 +207,8 @@ type Snapshot struct {
 	Phase      string           `json:"phase"`
 	Mode       string           `json:"mode"`
 	DurationMs int64            `json:"durationMs"`
+	Target     int              `json:"target"`
+	TimeCapMs  int64            `json:"timeCapMs"`
 	ServerNow  int64            `json:"serverNow"` // server clock, Unix ms
 	StartAt    int64            `json:"startAt"`   // server clock, Unix ms; 0 in the lobby
 	EndAt      int64            `json:"endAt"`     // racing end, server clock; 0 until known
@@ -224,6 +226,10 @@ type SnapshotPlayer struct {
 
 	Offline bool `json:"offline,omitempty"` // missed 2 heartbeats; still in the roster
 	Waiting bool `json:"waiting,omitempty"` // joined mid-round; races in the next one
+
+	Finished  bool  `json:"finished"`  // race: reached the target
+	ElapsedMs int64 `json:"elapsedMs"` // race: phone-measured finish time
+
 }
 
 // WaitSnapshot reads snapshots until one satisfies ok, and returns it.

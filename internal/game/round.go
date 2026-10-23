@@ -79,17 +79,22 @@ func (RoundResults) event() {}
 // count, and how participants are ordered.
 type rules interface {
 	// ended reports whether racing is over at now, and when it ended.
-	ended(r Round, now time.Time) (time.Time, bool)
+	ended(r Round, now time.Time, in []*entry) (time.Time, bool)
 	// counts reports whether a report taken at phone-elapsed time counts.
 	counts(r Round, elapsed time.Duration) bool
 	// less orders a ahead of b.
 	less(a, b *entry) bool
+	// target is the total that finishes the round for a player; 0 if the
+	// mode has none.
+	target(r Round) int
 }
 
 func rulesFor(m Mode) rules {
 	switch m {
 	case IndividualTimed:
 		return timedRules{}
+	case IndividualRace:
+		return raceRules{}
 	}
 	panic("game: no rules for mode " + string(m))
 }
@@ -97,7 +102,7 @@ func rulesFor(m Mode) rules {
 // timedRules: everyone races for exactly Duration; most shakes wins.
 type timedRules struct{}
 
-func (timedRules) ended(r Round, now time.Time) (time.Time, bool) {
+func (timedRules) ended(r Round, now time.Time, _ []*entry) (time.Time, bool) {
 	end := r.StartAt.Add(r.Config.Duration)
 	return end, !now.Before(end)
 }
@@ -118,6 +123,8 @@ func (timedRules) less(a, b *entry) bool {
 	return a.seq < b.seq
 }
 
+func (timedRules) target(Round) int { return 0 }
+
 // Start begins a round from the lobby: the countdown runs until StartAt.
 // Everyone in the roster takes part.
 func (e *Engine) Start() (Round, error) {
@@ -129,13 +136,27 @@ func (e *Engine) Start() (Round, error) {
 		return Round{}, ErrNoPlayers
 	}
 	for _, p := range e.players {
-		p.Total, p.reached, p.inRound = 0, 0, true
+		p.clearRound()
+		p.inRound = true
 	}
 	e.phase = PhaseCountdown
 	e.rules = rulesFor(e.config.Mode)
 	e.round = Round{Config: e.config, StartAt: e.clock.Now().Add(StartLead)}
 	e.standings = nil
 	return e.round, nil
+}
+
+// End is the host's 結束: racing ends now, whatever the mode, and the
+// grace period begins.
+func (e *Engine) End() error {
+	now := e.sync()
+	if e.phase != PhaseRacing {
+		return ErrWrongPhase
+	}
+	e.round.EndAt = now
+	e.phase = PhaseGrace
+	e.events = append(e.events, RoundEnded{})
+	return nil
 }
 
 // Again returns from results to the lobby with the same roster.
@@ -154,7 +175,8 @@ func (e *Engine) toLobby() {
 	e.round = Round{}
 	e.standings = nil
 	for _, p := range e.players {
-		p.Total, p.reached, p.inRound = 0, 0, false
+		p.clearRound()
+		p.inRound = false
 	}
 }
 
@@ -162,7 +184,9 @@ func (e *Engine) toLobby() {
 // accepted while racing and during grace, subject to light validation:
 // totals never decrease, are clamped to the rate cap, and reports whose
 // elapsed time is negative, implausibly far ahead of the server, or not
-// counted by the mode's rules are ignored.
+// counted by the mode's rules are ignored. In modes with a target, totals
+// are clamped to it, and the first report that reaches it is the
+// player's finish, timed by that report's phone-measured elapsed time.
 func (e *Engine) Progress(id string, rep Report) {
 	now := e.sync()
 	if e.phase != PhaseRacing && e.phase != PhaseGrace {
@@ -177,10 +201,18 @@ func (e *Engine) Progress(id string, rep Report) {
 		return
 	}
 	total := min(rep.Total, int(MaxShakesPerSecond*rep.Elapsed.Seconds())+RateSlack)
+	target := e.rules.target(e.round)
+	if target > 0 {
+		total = min(total, target)
+	}
 	if total <= p.Total {
 		return
 	}
 	p.Total, p.reached = total, rep.Elapsed
+	if target > 0 && total == target {
+		p.Finished, p.Finish, p.finishedAt = true, rep.Elapsed, now
+		e.sync() // the finish may end the round
+	}
 }
 
 // Events returns and clears the pending events.
@@ -202,7 +234,7 @@ func (e *Engine) sync() (now time.Time) {
 			}
 			e.phase = PhaseRacing
 		case PhaseRacing:
-			end, ok := e.rules.ended(e.round, now)
+			end, ok := e.rules.ended(e.round, now, e.participants())
 			if !ok {
 				return now
 			}
@@ -222,14 +254,20 @@ func (e *Engine) sync() (now time.Time) {
 	}
 }
 
-// ranking orders the round's participants.
-func (e *Engine) ranking() []Standing {
+// participants are the players taking part in the current round.
+func (e *Engine) participants() []*entry {
 	var in []*entry
 	for _, p := range e.players {
 		if p.inRound {
 			in = append(in, p)
 		}
 	}
+	return in
+}
+
+// ranking orders the round's participants.
+func (e *Engine) ranking() []Standing {
+	in := e.participants()
 	slices.SortStableFunc(in, func(a, b *entry) int {
 		switch {
 		case e.rules.less(a, b):

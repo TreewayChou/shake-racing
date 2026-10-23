@@ -60,8 +60,8 @@ function connect(name){
     else if(m.type=="ping")send({type:"pong",id:m.id,clientTs:Date.now()});
     else if(m.type=="config"){cfg=m;if(R){clearInterval(R.iv);prev=R;R=null}lobby()}
     else if(m.type=="countdown")begin(m);
-    else if(m.type=="end"&&R&&!R.res)say("時間到！結算中…");
-    else if(m.type=="result"&&R){R.res=1;R.lock=1;clearInterval(R.iv);$("t").textContent="";$("n").textContent=m.totalShakes;say("第 "+m.rank+" 名／共 "+m.players+" 人");vib([100,60,100])}
+    else if(m.type=="end"&&R&&!R.res){if(!R.lock)say((R.T?"結束":"時間到")+"！結算中…");R.lock=1}
+    else if(m.type=="result"&&R){R.res=1;R.lock=1;clearInterval(R.iv);$("t").textContent=m.finished?sec(m.elapsedMs):"";$("n").textContent=m.totalShakes;say("第 "+m.rank+" 名／共 "+m.players+" 人");vib([100,60,100])}
   };
   // Reconnect after a drop, unless told to stop.
   ws.onclose=function(){if(stop)return;if(joined)say("連線中斷，重新連線中…");joined=0;setTimeout(function(){if(!stop)connect(nick)},1000)};
@@ -88,9 +88,12 @@ function onMotion(e){
 function shake(){
   var n=$("n");
   if(R){
-    // Racing: count only inside [start, start+duration) on this phone's clock.
+    // Racing: count only inside [start, start+duration) on this phone's
+    // clock. In a race, reaching the target is the finish: its local
+    // elapsed time is reported at once.
     if(!R.go||R.lock||el()>=R.D)return;
     n.textContent=++R.total;
+    if(R.T&&R.total>=R.T){R.lock=1;R.fin=Math.round(el());vib([100,60,100]);say("完成！等待其他玩家…");$("t").textContent=sec(R.fin);report()}
   }else{
     n.textContent=++count;
     var now=Date.now();
@@ -111,29 +114,36 @@ function el(){return performance.now()-R.p0}
 function lobby(){
   $("t").textContent="";$("n").textContent=count;
   say("已加入！搖一搖手機暖身，等待主持人開始…");
-  if(cfg)$("mode").textContent="個人限時 "+cfg.durationMs/1000+" 秒";
+  if(cfg)$("mode").textContent=cfg.target?"個人競速 "+cfg.target+" 下（上限 "+cfg.timeCapMs/1000+" 秒）":"個人限時 "+cfg.durationMs/1000+" 秒";
 }
+function sec(ms){return(ms/1000).toFixed(2)+"s"}
 function begin(m){
   if(R){clearInterval(R.iv);prev=R}
   // Resuming after a reconnect: keep the larger of the server's and our own
-  // count, since shakes made while offline were never sent.
-  var t=m.totalShakes||0;
-  if(prev&&Math.abs(prev.S-m.startAt)<2000)t=Math.max(t,prev.total);
+  // count, since shakes made while offline were never sent, and a race
+  // finish either side knows of.
+  var t=m.totalShakes||0,f=m.finishedMs||0;
+  if(prev&&Math.abs(prev.S-m.startAt)<2000){t=Math.max(t,prev.total);f=f||prev.fin}
   prev=null;
-  R={S:m.startAt,D:m.durationMs,total:t,go:0,lock:0,res:0,sent:0};
-  $("n").textContent=t;say("準備…");
+  // Race: D is the time cap and T the target; timed: D is the duration.
+  R={S:m.startAt,D:m.durationMs||m.timeCapMs,T:m.target||0,fin:f,total:t,go:0,lock:f?1:0,res:0,sent:0};
+  $("n").textContent=t;say("準備…");if(f)$("t").textContent=sec(f);
   R.iv=setInterval(loop,30);loop();
 }
 function loop(){
   var now=Date.now();
   if(!R.go){
     if(now<R.S){$("t").textContent=Math.ceil((R.S-now)/1000);return}
-    R.go=1;R.p0=performance.now()-(now-R.S);vib(200);say("搖！用力搖！");
+    R.go=1;R.p0=performance.now()-(now-R.S);if(!R.fin){vib(200);say("搖！用力搖！")}else say("完成！等待其他玩家…");
   }
   var e=el();
   if(!R.lock&&e>=R.D){R.lock=1;vib([100,60,100]);say("時間到！結算中…")}
-  $("t").textContent=R.lock?"":Math.ceil((R.D-e)/1000);
-  if(e-R.sent>=150){R.sent=e;send({type:"progress",totalShakes:R.total,elapsedMs:Math.round(Math.min(e,R.D))})}
+  if(!R.fin)$("t").textContent=R.lock?"":R.T?R.T-R.total:Math.ceil((R.D-e)/1000);
+  if(e-R.sent>=150)report();
+}
+function report(){
+  var e=el();R.sent=e;
+  send(R.fin?{type:"progress",totalShakes:R.total,elapsedMs:R.fin,finished:true}:{type:"progress",totalShakes:R.total,elapsedMs:Math.round(Math.min(e,R.D))});
 }
 function noSensor(){warn("⚠️ 偵測不到動作感應器。請確認使用 HTTPS 連結開啟，或改用其他手機。")}
 function arm(){
