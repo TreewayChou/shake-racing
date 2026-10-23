@@ -5,52 +5,57 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>搖搖競速 大螢幕</title>
 <style>
+/* Flat, bright palette with no image assets, readable across a room. */
+:root{--bg:#2563eb;--ink:#0f172a;--panel:#1d4ed8;--deep:#1e3a8a;--gold:#ffcc00;--go:#22c55e;--stop:#ef4444}
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;background:#10164a;color:#fff;overflow:hidden}
+body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;background:var(--bg);color:#fff;overflow:hidden}
 header{display:flex;align-items:baseline;justify-content:space-between;padding:24px 40px}
-h1{margin:0;font-size:48px}
-#count{font-size:28px;opacity:.85}
-#status{padding:0 40px;color:#ffcc00;min-height:1.5em}
+h1{margin:0;font-size:48px;font-weight:900}
+#count{font-size:28px;font-weight:600}
+body.live #count{visibility:hidden}
+#status{padding:0 40px;color:var(--gold);min-height:1.5em;font-weight:700}
 #cards{display:flex;flex-wrap:wrap;gap:12px;padding:16px 40px}
-.card{background:#2a3aa8;border-radius:12px;padding:12px 20px;font-size:24px;font-weight:600}
+.card{background:#fff;color:var(--deep);border-radius:12px;padding:10px 18px;font-size:24px;font-weight:700}
 .card.pulse{animation:pulse .35s ease-out}
 .card.off{opacity:.5}
-.card small{font-size:16px;color:#ffcc00}
-.card .kick{margin-left:10px;padding:2px 8px;font-size:16px;background:rgba(255,255,255,.15)}
-.card .kick:hover{background:#c62828}
+.card small{font-size:16px;color:var(--stop)}
+.card .kick{margin-left:10px;padding:2px 8px;font-size:16px;background:#e2e8f0;color:var(--deep)}
+.card .kick:hover{background:var(--stop);color:#fff}
 #reset{position:fixed;right:16px;bottom:16px;z-index:2;font-size:18px;padding:8px 16px;opacity:.7}
-#join{display:flex;align-items:center;gap:32px;margin:0 40px;padding:24px;background:#fff;color:#10164a;border-radius:20px}
+#join{display:flex;align-items:center;gap:32px;margin:0 40px;padding:24px;background:#fff;color:var(--deep);border-radius:20px}
 #qr{width:280px;height:280px;flex:none}
 #qr[hidden]{display:none}
-#joinurl{font-size:40px;font-weight:700;word-break:break-all}
-#joinhint{font-size:24px;margin-bottom:8px}
-#warn{margin-top:12px;font-size:22px;font-weight:600;color:#c62828}
-@keyframes pulse{0%{transform:scale(1.18);background:#ffcc00;color:#222}100%{transform:scale(1)}}
-#settings{display:flex;align-items:center;gap:12px;padding:16px 40px;font-size:24px;flex-wrap:wrap}
-button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:10px 22px;background:#2a3aa8;color:#fff;cursor:pointer}
-button.on{background:#ffcc00;color:#222}
-button.big{background:#22c55e;font-size:32px;padding:14px 40px;margin-left:auto}
+#joinurl{font-size:40px;font-weight:800;word-break:break-all}
+#joinhint{font-size:24px;margin-bottom:8px;font-weight:600}
+#warn{margin-top:12px;font-size:22px;font-weight:700;color:#c62828}
+@keyframes pulse{0%{transform:scale(1.18);background:var(--gold);color:var(--ink)}100%{transform:scale(1)}}
+#settings{display:flex;align-items:center;gap:12px;padding:16px 40px;font-size:24px;font-weight:600;flex-wrap:wrap}
+button{font:inherit;font-weight:800;border:0;border-radius:12px;padding:10px 22px;background:var(--deep);color:#fff;cursor:pointer}
+button.on{background:var(--gold);color:var(--ink)}
+button.big{background:var(--go);font-size:32px;padding:14px 40px;margin-left:auto}
 button:disabled{opacity:.4;cursor:default}
 .hide{display:none!important}
 #race{display:flex;gap:24px;padding:0 40px;height:calc(100vh - 140px)}
-#track{flex:1;min-width:0;height:100%;background:#0b7a3e;border-radius:16px}
-#board{width:320px;flex:none;font-size:22px}
-#board h2,#results h2{margin:0 0 8px;font-size:28px}
+#track{flex:1;min-width:0;height:100%;background:#f8fafc;border-radius:16px}
+#board{width:340px;flex:none;font-size:22px;font-weight:600;background:var(--panel);border-radius:16px;padding:16px 20px;align-self:flex-start}
+#board h2,#results h2{margin:0 0 8px;font-size:28px;font-weight:900}
+#results h2{margin-top:8px;font-size:44px}
 #board ol{margin:0;padding-left:40px}
 #board li{padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#timer{position:fixed;top:20px;left:50%;transform:translateX(-50%);font-size:56px;font-weight:800;color:#ffcc00}
-#end{position:fixed;top:24px;right:40px;background:#e53935;font-size:28px}
-#botbar{display:flex;align-items:center;gap:10px;padding:0 40px 8px;font-size:18px;opacity:.8}
+.sw{display:inline-block;width:.8em;height:.8em;border-radius:50%;margin-right:8px;vertical-align:-.05em;box-shadow:0 0 0 2px #fff}
+#timer{position:fixed;top:16px;left:50%;transform:translateX(-50%);font-size:56px;font-weight:900;color:var(--gold)}
+#end{position:fixed;top:24px;right:40px;background:var(--stop);font-size:28px}
+#botbar{display:flex;align-items:center;gap:10px;padding:0 40px 8px;font-size:18px;opacity:.85}
 #botbar button{font-size:18px;padding:6px 14px}
 #settings>span{display:inline-flex;align-items:center;gap:8px;margin-right:16px}
-#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(16,22,74,.6);font-size:220px;font-weight:900;color:#ffcc00;text-shadow:0 8px 24px #000}
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(37,99,235,.55);font-size:240px;font-weight:900;color:var(--gold);-webkit-text-stroke:8px var(--deep);paint-order:stroke fill}
 #overlay.small{font-size:96px}
 #results{padding:0 40px;text-align:center}
 #podium{display:flex;justify-content:center;align-items:flex-end;gap:24px;margin:24px 0}
-.step{width:260px;border-radius:16px 16px 0 0;display:flex;flex-direction:column;justify-content:flex-start;align-items:center;padding:16px;font-size:30px;font-weight:800}
+.step{width:260px;border-radius:16px 16px 0 0;box-shadow:0 0 0 4px #fff;display:flex;flex-direction:column;justify-content:flex-start;align-items:center;padding:16px;font-size:30px;font-weight:800}
 .step small{font-size:22px;font-weight:600}
 .step b{font-size:64px}
-#rest{list-style:none;padding:0;font-size:24px;columns:3;max-width:1100px;margin:0 auto 24px}
+#rest{list-style:none;padding:0;font-size:24px;font-weight:600;columns:3;max-width:1100px;margin:0 auto 24px}
 </style>
 </head>
 <body>
@@ -74,6 +79,50 @@ button:disabled{opacity:.4;cursor:default}
   var cards=$("cards"),count=$("count"),status=$("status"),last="",ws=null,snap=null,off=null;
   function send(o){if(ws&&ws.readyState==1)ws.send(JSON.stringify(o))}
   function show(id,on){$(id).classList.toggle("hide",!on)}
+  // set changes an element's text and class only when they differ, so the
+  // per-frame overlay and timer updates cost no layout when nothing moved.
+  function set(el,cls,txt){if(el.className!==cls)el.className=cls;if(txt!=null&&el._t!==txt){el._t=txt;el.textContent=txt}}
+
+  // Sound: all four effects are synthesized with Web Audio oscillators,
+  // on the host only. The kiosk browser allows autoplay; elsewhere the
+  // context is resumed on the first click or key press.
+  var AC=window.AudioContext||window.webkitAudioContext,ac=null,master=null,beat=0,nextBeat=0;
+  function audio(){
+    if(!ac&&AC){try{ac=new AC();master=ac.createGain();master.gain.value=.6;master.connect(ac.destination)}catch(_){ac=null}}
+    if(ac&&ac.state=="suspended")ac.resume().catch(function(){});
+    return ac;
+  }
+  addEventListener("pointerdown",audio);addEventListener("keydown",audio);
+  // tone plays one enveloped note: frequency f (gliding to f2), at offset
+  // dt seconds from now, for dur seconds.
+  function tone(f,dt,dur,type,vol,f2){
+    var a=audio();if(!a)return;
+    var t=a.currentTime+dt,o=a.createOscillator(),g=a.createGain();
+    o.type=type;o.frequency.setValueAtTime(f,t);if(f2)o.frequency.exponentialRampToValueAtTime(f2,t+dur);
+    g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(vol,t+.015);g.gain.exponentialRampToValueAtTime(.0001,t+dur);
+    o.connect(g);g.connect(master);o.start(t);o.stop(t+dur+.05);
+  }
+  var sfx={
+    beep:function(){tone(660,0,.18,"square",.22)},
+    horn:function(){[220,277,330,440].forEach(function(f){tone(f,0,1.1,"sawtooth",.12)})},
+    fanfare:function(){
+      [[523,0,.14],[659,.14,.14],[784,.28,.14],[1047,.42,.7]].forEach(function(n){tone(n[0],n[1],n[2],"square",.16);tone(n[0]/2,n[1],n[2],"triangle",.2)});
+      [523,659,784].forEach(function(f){tone(f,.42,.9,"triangle",.1)});
+    },
+    // loop schedules a light bass-and-tick beat a little ahead of time;
+    // called every frame while racing.
+    loop:function(){
+      var a=audio();if(!a)return;
+      if(nextBeat<a.currentTime)nextBeat=a.currentTime+.05;
+      while(nextBeat<a.currentTime+.12){
+        var dt=nextBeat-a.currentTime;
+        if(beat%2==0)tone([110,110,147,131][(beat>>1)%4],dt,.18,"triangle",.18);
+        tone(beat%2?2400:1800,dt,.03,"square",.025);
+        beat++;nextBeat+=.2;
+      }
+    }
+  };
+  audio();
 
   // Lobby: name cards, warm-up pulses, join QR/URL and settings.
   function renderCards(s){
@@ -118,7 +167,7 @@ button:disabled{opacity:.4;cursor:default}
     list.forEach(function(o){
       var b=document.createElement("button");
       b.textContent=o[1];b.dataset.v=o[0];
-      b.onclick=function(){var m={type:"setConfig"};m[field]=o[0];send(m)};
+      b.onclick=function(){this.blur();var m={type:"setConfig"};m[field]=o[0];send(m)};
       $(box).appendChild(b);
     });
   }
@@ -132,22 +181,27 @@ button:disabled{opacity:.4;cursor:default}
   function isTeam(s){return s.mode.slice(0,4)=="team"}
   var TN={red:"紅隊",blue:"藍隊",green:"綠隊",yellow:"黃隊"},TC={red:"#e53935",blue:"#1e88e5",green:"#43a047",yellow:"#fdd835"};
   function avg(t){return t.avg.toFixed(1)+" 下"}
+  // swatch builds a list row led by a team-coloured dot.
+  function swatch(li,team,text){var b=document.createElement("span");b.className="sw";b.style.background=TC[team];li.appendChild(b);li.appendChild(document.createTextNode(text))}
   $("shuffle").onclick=function(){this.blur();send({type:"shuffle"})};
   function fmt(ms){return(ms/1000).toFixed(2)+" 秒"}
   function score(p){return p.finished?"🏁 "+fmt(p.elapsedMs):p.total+" 下"}
   function start(){if(snap&&snap.phase=="lobby"&&snap.players.length)send({type:"start"})}
-  $("start").onclick=start;
-  $("end").onclick=function(){send({type:"end"})};
-  $("again").onclick=function(){send({type:"again"})};
+  $("start").onclick=function(){this.blur();start()};
+  $("end").onclick=function(){this.blur();send({type:"end"})};
+  $("again").onclick=function(){this.blur();send({type:"again"})};
   // Rehearsal bots: +10, fill to the 100 cap, clear.
   var botBtns=$("botbar").querySelectorAll("button");
   Array.prototype.forEach.call(botBtns,function(b){b.onclick=function(){this.blur();send({type:"bots",action:b.dataset.bots})}});
   function reset(){send({type:"reset"})}
   $("reset").onclick=function(){this.blur();reset()};
+  // Space starts a round from the lobby (held keys don't repeat it); R resets.
   addEventListener("keydown",function(e){
-    if(e.code=="Space"){e.preventDefault();start()}
-    else if(e.code=="KeyR"&&!e.ctrlKey&&!e.metaKey){reset()}
+    if(e.code=="Space"){e.preventDefault();if(!e.repeat)start()}
+    else if(e.code=="KeyR"&&!e.ctrlKey&&!e.metaKey&&!e.repeat){reset()}
   });
+  // Keep Space from also clicking a focused button on release.
+  addEventListener("keyup",function(e){if(e.code=="Space")e.preventDefault()});
 
   // Server time: snapshots carry serverNow. The freshest-looking sample
   // (largest serverNow - Date.now()) has the least network delay in it.
@@ -160,8 +214,10 @@ button:disabled{opacity:.4;cursor:default}
     var online=0,waiting=0;
     s.players.forEach(function(p){if(!p.offline)online++;if(p.waiting)waiting++});
     count.textContent=s.players.length+" 人已加入 · "+online+" 人在線"+(waiting?" · "+waiting+" 人等待下一場":"");
+    var live=s.phase=="countdown"||s.phase=="racing"||s.phase=="grace";
+    document.body.classList.toggle("live",live);
     show("lobby",s.phase=="lobby");
-    show("race",s.phase=="countdown"||s.phase=="racing"||s.phase=="grace");
+    show("race",live);
     show("results",s.phase=="results");
     if(s.phase=="lobby"){
       renderCards(s);
@@ -174,10 +230,12 @@ button:disabled{opacity:.4;cursor:default}
     show("end",s.phase=="racing");
     if(s.phase!="lobby")last="";
     if(s.phase=="countdown"&&prev!="countdown")runners={};
-    var ol=$("top");ol.textContent="";
-    $("boardh").textContent=isTeam(s)?"⭐ MVP Top 5":"即時排行 Top 15";
-    (isTeam(s)?s.mvp||[]:s.top).forEach(function(p){var li=document.createElement("li");li.textContent=p.name+"　"+(isRace(s)?score(p):p.total);if(isTeam(s))li.style.color=TC[p.team];ol.appendChild(li)});
-    if(s.phase=="results"&&prev!="results"){if(isTeam(s))teamPodium(s);else podium(s.top)}
+    if(live){
+      var ol=$("top");ol.textContent="";
+      $("boardh").textContent=isTeam(s)?"⭐ MVP Top 5":"即時排行 Top 15";
+      (isTeam(s)?s.mvp||[]:s.top).forEach(function(p){var li=document.createElement("li"),txt=p.name+"　"+(isRace(s)?score(p):p.total);if(isTeam(s))swatch(li,p.team,txt);else li.textContent=txt;ol.appendChild(li)});
+    }
+    if(s.phase=="results"&&prev!="results"){if(isTeam(s))teamPodium(s);else podium(s.top);if(prev)sfx.fanfare()}
     show("resth",s.phase=="results"&&isTeam(s));
   }
 
@@ -195,7 +253,7 @@ button:disabled{opacity:.4;cursor:default}
       pd.appendChild(d);
     });
     var rest=$("rest");rest.textContent="";
-    (s.mvp||[]).forEach(function(p){var li=document.createElement("li");li.textContent=p.rank+". "+p.name+"（"+TN[p.team]+"）　"+p.total+" 下";li.style.color=TC[p.team];rest.appendChild(li)});
+    (s.mvp||[]).forEach(function(p){var li=document.createElement("li");swatch(li,p.team,p.rank+". "+p.name+"（"+TN[p.team]+"）　"+p.total+" 下");rest.appendChild(li)});
   }
 
   function podium(top){
@@ -214,68 +272,97 @@ button:disabled{opacity:.4;cursor:default}
     top.slice(3).forEach(function(p){var li=document.createElement("li");li.textContent=p.rank+". "+p.name+"　"+score(p);rest.appendChild(li)});
   }
 
-  // Track: one dot per runner on a multi-lane track, eased toward the
-  // latest snapshot every frame so 10 Hz updates move smoothly at 60 FPS.
-  var cv=$("track"),cx=cv.getContext("2d"),runners={},lastFrame=0;
+  // Track: one dot per runner, eased toward the latest snapshot every
+  // frame so 10 Hz updates move smoothly at 60 FPS. Individual and team
+  // tracks share one look: light lanes, white start line, checkered
+  // finish line in race modes, bright dots with a white ring.
+  var cv=$("track"),cx=cv.getContext("2d"),runners={},lastFrame=0,beepN=0,hornAt=0;
+  var ov=$("overlay"),tm=$("timer"),INK="#0f172a";
   function frame(t){
     requestAnimationFrame(frame);
     var dt=Math.min(.1,(t-lastFrame)/1000);lastFrame=t;
     if(!snap)return;
-    var ph=snap.phase,now=sNow(),ov=$("overlay"),tm=$("timer");
+    var ph=snap.phase,now=sNow(),live=ph=="countdown"||ph=="racing";
     var race=isRace(snap),endAt=snap.startAt+(race?snap.timeCapMs:snap.durationMs);
-    if(ph=="countdown"){ov.className="";ov.textContent=Math.max(1,Math.ceil((snap.startAt-now)/1000))}
-    else if(ph=="racing"&&now-snap.startAt<800){ov.className="";ov.textContent="GO!"}
-    else if(ph=="grace"){ov.className="small";ov.textContent="衝線結算中..."}
-    else ov.className="hide";
+    var go=live&&now>=snap.startAt;
+    if(ph=="countdown"&&!go){
+      var n=Math.max(1,Math.ceil((snap.startAt-now)/1000));
+      set(ov,"",String(n));
+      if(n!=beepN){beepN=n;sfx.beep()}
+    }else if(go&&now-snap.startAt<800)set(ov,"","GO!");
+    else if(ph=="grace")set(ov,"small","衝線結算中...");
+    else set(ov,"hide");
+    if(ph!="countdown")beepN=0;
+    // Horn at the start instant on our own clock, not on the next
+    // snapshot; a host that joins mid-race stays quiet.
+    if(go&&hornAt!=snap.startAt){hornAt=snap.startAt;if(now-snap.startAt<1000)sfx.horn()}
+    if(ph=="racing"&&now-snap.startAt>1000)sfx.loop();
     // A team race has no time limit: show the target instead.
-    if(ph=="racing"){tm.className="";tm.textContent=snap.mode=="team-race"?"隊伍平均目標 "+snap.target+" 下":(race?"目標 "+snap.target+" 下・剩 ":"")+Math.max(0,Math.ceil((endAt-now)/1000))+" 秒"}else tm.className="hide";
+    if(ph=="racing")set(tm,"",snap.mode=="team-race"?"隊伍平均目標 "+snap.target+" 下":(race?"目標 "+snap.target+" 下・剩 ":"")+Math.max(0,Math.ceil((endAt-now)/1000))+" 秒");else set(tm,"hide");
     if(ph!="countdown"&&ph!="racing"&&ph!="grace")return;
     if(isTeam(snap))drawTeams(dt);else drawTrack(dt);
   }
-  // Team track: four big lanes, one runner per team at its average.
-  function drawTeams(dt){
+  // lanes sizes the canvas and paints n lanes with start and finish lines;
+  // it returns the canvas size and the runners' x range.
+  function lanes(n,finish){
     var w=cv.clientWidth,h=cv.clientHeight,r=devicePixelRatio||1;
     if(cv.width!=w*r||cv.height!=h*r){cv.width=w*r;cv.height=h*r}
-    cx.setTransform(r,0,0,r,0,0);cx.clearRect(0,0,w,h);
-    var ts=snap.teams||[],lh=h/4,max=0,tr=snap.mode=="team-race",x0=24,x1=w-200;
+    cx.setTransform(r,0,0,r,0,0);
+    var lh=h/n,x0=28,x1=w-(finish||120);
+    for(var i=0;i<n;i++){cx.fillStyle=i%2?"#e2e8f0":"#f8fafc";cx.fillRect(0,i*lh,w,lh)}
+    cx.fillStyle="#fff";cx.fillRect(x0-6,0,6,h);cx.fillStyle="#94a3b8";cx.fillRect(x0-1,0,1,h);
+    return{w:w,h:h,lh:lh,x0:x0,x1:x1};
+  }
+  function flag(x,h,sq){for(var y=0,k=0;y<h;y+=sq,k++){cx.fillStyle=k%2?INK:"#fff";cx.fillRect(x,y,sq,sq);cx.fillStyle=k%2?"#fff":INK;cx.fillRect(x+sq,y,sq,sq)}}
+  function dot(x,y,rad,c,ring){cx.beginPath();cx.arc(x,y,rad,0,7);cx.fillStyle=c;cx.fill();cx.lineWidth=ring;cx.strokeStyle="#fff";cx.stroke()}
+  function label(text,x,y,size,align){
+    cx.font="800 "+size+"px system-ui";cx.textAlign=align;cx.lineJoin="round";
+    cx.lineWidth=Math.max(3,size/5);cx.strokeStyle="#fff";cx.strokeText(text,x,y);cx.fillStyle=INK;cx.fillText(text,x,y);
+  }
+  // Team track: four lanes tinted with the team colour, one big runner
+  // per team at its average.
+  function drawTeams(dt){
+    var ts=snap.teams||[],max=0,tr=snap.mode=="team-race",L=lanes(4,240);
     ts.forEach(function(t){if(t.avg>max)max=t.avg});
     var scale=tr?snap.target:Math.max(20,max*1.15);
-    if(tr)for(var y=0,k=0;y<h;y+=12,k++){cx.fillStyle=k%2?"#222":"#fff";cx.fillRect(x1,y,8,12);cx.fillStyle=k%2?"#fff":"#222";cx.fillRect(x1+8,y,8,12)}
     ts.forEach(function(t,i){
-      var y=i*lh,c=TC[t.team];
-      cx.globalAlpha=.25;cx.fillStyle=c;cx.fillRect(0,y+4,w,lh-8);cx.globalAlpha=1;
+      cx.globalAlpha=.18;cx.fillStyle=TC[t.team];cx.fillRect(0,i*L.lh,L.w,L.lh);cx.globalAlpha=1;cx.fillRect(0,i*L.lh,10,L.lh);
+    });
+    if(tr)flag(L.x1,L.h,12);
+    ts.forEach(function(t,i){
+      var y=i*L.lh,c=TC[t.team];
       var ru=runners[t.team]||(runners[t.team]={x:0});
       ru.x+=(Math.min(1,t.avg/scale)-ru.x)*Math.min(1,dt*8);
-      var x=x0+ru.x*(x1-x0),rad=Math.min(lh*.32,48);
-      cx.fillStyle=c;cx.beginPath();cx.arc(x+rad,y+lh/2,rad,0,7);cx.fill();
-      cx.fillStyle="#fff";cx.textAlign="left";cx.font="800 "+Math.min(40,lh*.28)+"px system-ui";
-      cx.fillText(TN[t.team]+"・"+t.members+" 人",x0,y+lh*.25);
-      cx.textAlign="right";cx.fillText(avg(t),w-16,y+lh*.6);
+      var rad=Math.min(L.lh*.3,48),x=L.x0+rad+ru.x*(L.x1-L.x0-2*rad);
+      dot(x,y+L.lh*.58,rad,c,6);
+      var fs=Math.min(44,L.lh*.24);
+      label(TN[t.team]+"・"+t.members+" 人",L.x0+8,y+fs+12,fs,"left");
+      label(avg(t),L.w-20,y+L.lh*.58+fs*.35,fs*1.2,"right");
     });
   }
+  // Individual track: up to 20 lanes, several runners per lane at
+  // staggered heights. With a crowd only the leaders are named, so the
+  // names stay readable; a small field names everyone.
+  var NAMED=12;
   function drawTrack(dt){
-    var w=cv.clientWidth,h=cv.clientHeight,r=devicePixelRatio||1;
-    if(cv.width!=w*r||cv.height!=h*r){cv.width=w*r;cv.height=h*r}
-    cx.setTransform(r,0,0,r,0,0);cx.clearRect(0,0,w,h);
-    var ps=snap.players.filter(function(p){return !p.waiting}),n=ps.length,lanes=Math.max(1,Math.min(n,20)),lh=h/lanes;
-    var max=0;ps.forEach(function(p){if(p.total>max)max=p.total});
-    // Race: the track is the target long, ending at a checkered finish line.
-    var race=isRace(snap),scale=race?snap.target:Math.max(20,max*1.15),x0=24,x1=w-90;
-    for(var i=0;i<lanes;i++){cx.fillStyle=i%2?"#0d8a46":"#0b7a3e";cx.fillRect(0,i*lh,w,lh)}
-    cx.fillStyle="#fff";cx.fillRect(x0-4,0,4,h);
-    if(race)for(var y=0,k=0;y<h;y+=10,k++){cx.fillStyle=k%2?"#222":"#fff";cx.fillRect(x1,y,6,10);cx.fillStyle=k%2?"#fff":"#222";cx.fillRect(x1+6,y,6,10)}
-    cx.textAlign="center";cx.font="600 "+Math.max(11,Math.min(18,lh*.45))+"px system-ui";
-    var dot=Math.max(4,Math.min(12,lh*.3));
-    ps.forEach(function(p,i){
-      var ru=runners[p.id]||(runners[p.id]={x:0});
-      var target=p.total/scale;
-      ru.x+=(target-ru.x)*Math.min(1,dt*8);
-      var lane=i%lanes,stagger=Math.floor(i/lanes)/Math.ceil(n/lanes);
-      var x=x0+ru.x*(x1-x0),y=lane*lh+lh*(.35+.5*stagger);
-      cx.fillStyle="hsl("+(i*137%360)+",85%,60%)";
-      cx.beginPath();cx.arc(x,y,dot,0,7);cx.fill();
-      cx.fillStyle="#fff";cx.fillText(p.name,x,y-dot-3);
-    });
+    var ps=snap.players,run=[],i;
+    for(i=0;i<ps.length;i++)if(!ps[i].waiting)run.push(ps[i]);
+    var n=run.length,nl=Math.max(1,Math.min(n,20)),max=0;
+    for(i=0;i<n;i++)if(run[i].total>max)max=run[i].total;
+    var race=isRace(snap),L=lanes(nl,race?120:60),scale=race?snap.target:Math.max(20,max*1.15);
+    if(race)flag(L.x1+12,L.h,10);
+    var named={},top=snap.top||[];
+    for(i=0;i<top.length&&i<NAMED;i++)named[top[i].id]=1;
+    var rad=Math.max(5,Math.min(13,L.lh*.28)),fs=Math.max(14,Math.min(22,L.lh*.5)),per=Math.ceil(n/nl),tags=[];
+    for(i=0;i<n;i++){
+      var p=run[i],ru=runners[p.id]||(runners[p.id]={x:0,c:"hsl("+(i*137%360)+",85%,52%)"});
+      ru.x+=(p.total/scale-ru.x)*Math.min(1,dt*8);
+      var lane=i%nl,stag=per>1?Math.floor(i/nl)/(per-1):.5;
+      var x=L.x0+rad+ru.x*(L.x1-L.x0-rad),y=lane*L.lh+L.lh*(.3+.45*stag);
+      dot(x,y,rad,ru.c,2);
+      if(n<=30||named[p.id])tags.push([p.name,x,y-rad-4]);
+    }
+    for(i=0;i<tags.length;i++)label(tags[i][0],tags[i][1],tags[i][2],fs,"center");
   }
   requestAnimationFrame(frame);
 
