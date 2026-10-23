@@ -28,6 +28,12 @@ const (
 	// Reports further ahead are implausible and ignored.
 	ElapsedTolerance = time.Second
 
+	// StallTolerance is how far a phone's elapsedMs may lag the time the
+	// server has observed since the start: network delay and uplink
+	// stalls. A report further behind is timed at that lag instead, so a
+	// finish cannot claim a time long past.
+	StallTolerance = 10 * time.Second
+
 	// RateSlack is the number of shakes a report may exceed the rate cap by
 	// before it is clamped.
 	RateSlack = 3
@@ -87,8 +93,8 @@ func (RoundResults) event() {}
 type rules interface {
 	// ended reports whether racing is over at now, and when it ended.
 	ended(r Round, now time.Time, in []*entry) (time.Time, bool)
-	// counts reports whether a report taken at phone-elapsed time counts.
-	counts(r Round, elapsed time.Duration) bool
+	// limit is the latest phone-elapsed time a report may be taken at.
+	limit(r Round) time.Duration
 	// less orders a ahead of b.
 	less(a, b *entry) bool
 	// target is the total that finishes the round for a player; 0 if the
@@ -116,8 +122,8 @@ func (timedRules) ended(r Round, now time.Time, _ []*entry) (time.Time, bool) {
 	return end, !now.Before(end)
 }
 
-func (timedRules) counts(r Round, elapsed time.Duration) bool {
-	return elapsed <= r.Config.Duration
+func (timedRules) limit(r Round) time.Duration {
+	return r.Config.Duration
 }
 
 // less ranks by total; equal totals go to whoever reached it first on
@@ -201,8 +207,9 @@ func (e *Engine) toLobby() {
 // Progress records a participant's cumulative report. Reports are
 // accepted while racing and during grace, subject to light validation:
 // totals never decrease, are clamped to the rate cap, and reports whose
-// elapsed time is negative, implausibly far ahead of the server, or not
-// counted by the mode's rules are ignored. In modes with a target, totals
+// elapsed time is negative, implausibly far ahead of the server, or past
+// the mode's limit are ignored. An elapsed time further behind the server
+// than StallTolerance is moved up to it. In modes with a target, totals
 // are clamped to it, and the first report that reaches it is the
 // player's finish, timed by that report's phone-measured elapsed time.
 func (e *Engine) Progress(id string, rep Report) {
@@ -214,10 +221,12 @@ func (e *Engine) Progress(id string, rep Report) {
 	if p == nil || !p.inRound {
 		return
 	}
-	observed := now.Sub(e.round.StartAt)
-	if rep.Elapsed < 0 || rep.Elapsed > observed+ElapsedTolerance || !e.rules.counts(e.round, rep.Elapsed) {
+	observed, limit := now.Sub(e.round.StartAt), e.rules.limit(e.round)
+	if rep.Elapsed < 0 || rep.Elapsed > observed+ElapsedTolerance || rep.Elapsed > limit {
 		return
 	}
+	// A phone stops its clock at the limit, so time past it is no lag.
+	rep.Elapsed = max(rep.Elapsed, min(observed-StallTolerance, limit))
 	total := min(rep.Total, int(MaxShakesPerSecond*rep.Elapsed.Seconds())+RateSlack)
 	target := e.rules.target(e.round)
 	if target > 0 {

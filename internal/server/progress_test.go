@@ -113,6 +113,35 @@ func TestImplausibleElapsedIsIgnored(t *testing.T) {
 	}
 }
 
+func TestFinishClaimedFarBehindTheServerIsClampedToTheStallTolerance(t *testing.T) {
+	r := startIndividualRace(t, 100, 60000, "小明")
+	p := r.phones[0]
+
+	// At 30 s a finish timed 8 s arrives: the rate cap allows 100 shakes
+	// in 8 s, but no network stall explains a report 22 s old.
+	r.advanceTo(30000)
+	p.Finish(100, 8000)
+	p.Echo()
+
+	got, _ := r.host.NextSnapshot(r.h).Player(r.ids[0])
+	if want := int64(30000 - 10000); !got.Finished || got.ElapsedMs != want {
+		t.Errorf("finish = %+v, want finished at %d ms (observed minus the 10 s stall tolerance)", got, want)
+	}
+}
+
+func TestFinishDelayedWithinTheStallToleranceKeepsThePhoneTime(t *testing.T) {
+	r := startIndividualRace(t, 100, 60000, "小明")
+	p := r.phones[0]
+
+	r.advanceTo(17000) // a 3 s uplink stall
+	p.Finish(100, 14000)
+	p.Echo()
+
+	if got, _ := r.host.NextSnapshot(r.h).Player(r.ids[0]); !got.Finished || got.ElapsedMs != 14000 {
+		t.Errorf("finish = %+v, want finished at the phone's 14000 ms", got)
+	}
+}
+
 func TestProgressBeforeTheStartIsIgnored(t *testing.T) {
 	h := servertest.Start(t)
 	host := h.Host()

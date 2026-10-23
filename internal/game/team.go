@@ -1,6 +1,7 @@
 package game
 
 import (
+	"math"
 	"math/rand/v2"
 	"slices"
 	"time"
@@ -98,9 +99,9 @@ func (teamRaceRules) ended(r Round, now time.Time, in []*entry) (time.Time, bool
 	return time.Time{}, false
 }
 
-func (teamRaceRules) counts(Round, time.Duration) bool { return true }
-func (teamRaceRules) less(a, b *entry) bool            { return timedRules{}.less(a, b) }
-func (teamRaceRules) target(Round) int                 { return 0 }
+func (teamRaceRules) limit(Round) time.Duration { return math.MaxInt64 } // no time cap
+func (teamRaceRules) less(a, b *entry) bool     { return timedRules{}.less(a, b) }
+func (teamRaceRules) target(Round) int          { return 0 }
 
 // Shuffle is the host's 🔀 重新隨機分隊: the roster is dealt into the four
 // teams in random order, so sizes end within 1. Allowed only in the lobby.

@@ -27,8 +27,8 @@ func (raceRules) ended(r Round, now time.Time, in []*entry) (time.Time, bool) {
 	return end, !now.Before(end)
 }
 
-func (raceRules) counts(r Round, elapsed time.Duration) bool {
-	return elapsed <= r.Config.TimeCap
+func (raceRules) limit(r Round) time.Duration {
+	return r.Config.TimeCap
 }
 
 // less ranks finishers by their phone-measured finish time, ahead of
