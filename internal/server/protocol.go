@@ -1,5 +1,7 @@
 package server
 
+import "racing/internal/game"
+
 // Wire protocol: JSON messages tagged by "type".
 
 // envelope is decoded first to dispatch on the message type.
@@ -17,8 +19,22 @@ type joinMsg struct {
 // Server -> phone.
 
 type welcomeMsg struct {
-	Type     string `json:"type"` // "welcome"
-	PlayerID string `json:"playerId"`
+	Type      string      `json:"type"` // "welcome"
+	PlayerID  string      `json:"playerId"`
+	Constants detectorMsg `json:"constants"`
+}
+
+// detectorMsg is the shake-detector tuning, sent in welcome and injected
+// into the phone page as `var K={...}`.
+type detectorMsg struct {
+	Accel      float64 `json:"accel"`
+	Delta      float64 `json:"delta"`
+	Rearm      float64 `json:"rearm"`
+	CooldownMs int     `json:"cooldownMs"`
+}
+
+func newDetectorMsg(d game.Detector) detectorMsg {
+	return detectorMsg{Accel: d.Accel, Delta: d.Delta, Rearm: d.Rearm, CooldownMs: d.CooldownMs}
 }
 
 type errorMsg struct {
@@ -32,6 +48,12 @@ type snapshotMsg struct {
 	Type    string           `json:"type"` // "snapshot"
 	Phase   string           `json:"phase"`
 	Players []snapshotPlayer `json:"players"`
+}
+
+// warmupMsg is sent to hosts as soon as a lobby player warm-up shakes.
+type warmupMsg struct {
+	Type string `json:"type"` // "warmup"
+	ID   string `json:"id"`
 }
 
 type snapshotPlayer struct {
