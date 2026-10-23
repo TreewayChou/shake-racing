@@ -6,7 +6,7 @@
 <title>搖搖競速 大螢幕</title>
 <style>
 *{box-sizing:border-box}
-body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;background:#10164a;color:#fff}
+body{margin:0;min-height:100vh;font-family:system-ui,sans-serif;background:#10164a;color:#fff;overflow:hidden}
 header{display:flex;align-items:baseline;justify-content:space-between;padding:24px 40px}
 h1{margin:0;font-size:48px}
 #count{font-size:28px;opacity:.85}
@@ -21,19 +21,51 @@ h1{margin:0;font-size:48px}
 #joinhint{font-size:24px;margin-bottom:8px}
 #warn{margin-top:12px;font-size:22px;font-weight:600;color:#c62828}
 @keyframes pulse{0%{transform:scale(1.18);background:#ffcc00;color:#222}100%{transform:scale(1)}}
+#settings{display:flex;align-items:center;gap:12px;padding:16px 40px;font-size:24px;flex-wrap:wrap}
+button{font:inherit;font-weight:700;border:0;border-radius:12px;padding:10px 22px;background:#2a3aa8;color:#fff;cursor:pointer}
+button.on{background:#ffcc00;color:#222}
+button.big{background:#22c55e;font-size:32px;padding:14px 40px;margin-left:auto}
+button:disabled{opacity:.4;cursor:default}
+.hide{display:none!important}
+#race{display:flex;gap:24px;padding:0 40px;height:calc(100vh - 140px)}
+#track{flex:1;min-width:0;height:100%;background:#0b7a3e;border-radius:16px}
+#board{width:320px;flex:none;font-size:22px}
+#board h2,#results h2{margin:0 0 8px;font-size:28px}
+#board ol{margin:0;padding-left:40px}
+#board li{padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#timer{position:fixed;top:20px;left:50%;transform:translateX(-50%);font-size:56px;font-weight:800;color:#ffcc00}
+#overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(16,22,74,.6);font-size:220px;font-weight:900;color:#ffcc00;text-shadow:0 8px 24px #000}
+#overlay.small{font-size:96px}
+#results{padding:0 40px;text-align:center}
+#podium{display:flex;justify-content:center;align-items:flex-end;gap:24px;margin:24px 0}
+.step{width:260px;border-radius:16px 16px 0 0;display:flex;flex-direction:column;justify-content:flex-start;align-items:center;padding:16px;font-size:30px;font-weight:800}
+.step small{font-size:22px;font-weight:600}
+.step b{font-size:64px}
+#rest{list-style:none;padding:0;font-size:24px;columns:3;max-width:1100px;margin:0 auto 24px}
 </style>
 </head>
 <body>
 <header><h1>🏁 百人搖搖競速</h1><div id="count">0 人已加入</div></header>
 <div id="status"></div>
+<div id="lobby">
 <section id="join"><img id="qr" alt="加入 QR Code" hidden><div><div id="joinhint">掃描 QR Code 加入遊戲</div><div id="joinurl">取得網址中…</div><div id="warn"></div></div></section>
+<div id="settings">個人限時：<span id="durs"></span><button id="start" class="big" disabled>開始（空白鍵）</button></div>
 <div id="cards"></div>
+</div>
+<div id="race" class="hide"><canvas id="track"></canvas><div id="board"><h2>即時排行 Top 15</h2><ol id="top"></ol></div></div>
+<div id="timer" class="hide"></div>
+<div id="results" class="hide"><h2>🏆 本場結果</h2><div id="podium"></div><ol id="rest"></ol><button id="again" class="big" style="margin:0">再來一場</button></div>
+<div id="overlay" class="hide"></div>
 <script>
 (function(){
-  var cards=document.getElementById("cards"),count=document.getElementById("count"),status=document.getElementById("status"),last="";
-  function render(s){
+  var $=function(i){return document.getElementById(i)};
+  var cards=$("cards"),count=$("count"),status=$("status"),last="",ws=null,snap=null,off=null;
+  function send(o){if(ws&&ws.readyState==1)ws.send(JSON.stringify(o))}
+  function show(id,on){$(id).classList.toggle("hide",!on)}
+
+  // Lobby: name cards, warm-up pulses, join QR/URL and settings.
+  function renderCards(s){
     var key=s.players.map(function(p){return p.id}).join(",");
-    count.textContent=s.players.length+" 人已加入";
     if(key===last)return;
     last=key;
     cards.textContent="";
@@ -45,7 +77,7 @@ h1{margin:0;font-size:48px}
   }
   // urls shows the join QR code and URL, with a warning when phones would
   // load the page over plain HTTP and so get no G-Sensor access.
-  var qr=document.getElementById("qr"),joinurl=document.getElementById("joinurl"),warn=document.getElementById("warn");
+  var qr=$("qr"),joinurl=$("joinurl"),warn=$("warn");
   function urls(m){
     var u=m.public||m.lan;
     joinurl.textContent=u||(m.tunnelMode=="pending"?"建立公開網址中…":"找不到可用網址");
@@ -60,10 +92,101 @@ h1{margin:0;font-size:48px}
     if(!d)return;
     d.classList.remove("pulse");void d.offsetWidth;d.classList.add("pulse");
   }
+  [15,30,45,60].forEach(function(sec){
+    var b=document.createElement("button");
+    b.textContent=sec+" 秒";b.dataset.ms=sec*1000;
+    b.onclick=function(){send({type:"setConfig",mode:"individual-timed",durationMs:sec*1000})};
+    $("durs").appendChild(b);
+  });
+  function start(){if(snap&&snap.phase=="lobby"&&snap.players.length)send({type:"start"})}
+  $("start").onclick=start;
+  $("again").onclick=function(){send({type:"again"})};
+  addEventListener("keydown",function(e){if(e.code=="Space"){e.preventDefault();start()}});
+
+  // Server time: snapshots carry serverNow. The freshest-looking sample
+  // (largest serverNow - Date.now()) has the least network delay in it.
+  function sNow(){return Date.now()+(off||0)}
+
+  function onSnapshot(s){
+    var d=s.serverNow-Date.now();
+    off=off==null||d>off?d:off+(d-off)*0.02;
+    var prev=snap&&snap.phase;snap=s;
+    count.textContent=s.players.length+" 人已加入";
+    show("lobby",s.phase=="lobby");
+    show("race",s.phase=="countdown"||s.phase=="racing"||s.phase=="grace");
+    show("results",s.phase=="results");
+    if(s.phase=="lobby"){
+      renderCards(s);
+      $("start").disabled=!s.players.length;
+      Array.prototype.forEach.call($("durs").children,function(b){b.classList.toggle("on",+b.dataset.ms==s.durationMs)});
+    }
+    if(s.phase!="lobby")last="";
+    if(s.phase=="countdown"&&prev!="countdown")runners={};
+    var ol=$("top");ol.textContent="";
+    s.top.forEach(function(p){var li=document.createElement("li");li.textContent=p.name+"　"+p.total;ol.appendChild(li)});
+    if(s.phase=="results"&&prev!="results")podium(s.top);
+  }
+
+  function podium(top){
+    var pd=$("podium");pd.textContent="";
+    var place=[1,0,2],h=[300,380,240],col=["#c0c0c0","#ffcc00","#cd7f32"];
+    place.forEach(function(i,k){
+      var p=top[i];if(!p)return;
+      var d=document.createElement("div");d.className="step";
+      d.style.height=h[k]+"px";d.style.background=col[k];d.style.color="#222";
+      d.innerHTML="<b></b><span></span><small></small>";
+      d.children[0].textContent=p.rank;d.children[1].textContent=p.name;d.children[2].textContent=p.total+" 下";
+      pd.appendChild(d);
+    });
+    var rest=$("rest");rest.textContent="";
+    top.slice(3).forEach(function(p){var li=document.createElement("li");li.textContent=p.rank+". "+p.name+"　"+p.total;rest.appendChild(li)});
+  }
+
+  // Track: one dot per runner on a multi-lane track, eased toward the
+  // latest snapshot every frame so 10 Hz updates move smoothly at 60 FPS.
+  var cv=$("track"),cx=cv.getContext("2d"),runners={},lastFrame=0;
+  function frame(t){
+    requestAnimationFrame(frame);
+    var dt=Math.min(.1,(t-lastFrame)/1000);lastFrame=t;
+    if(!snap)return;
+    var ph=snap.phase,now=sNow(),ov=$("overlay"),tm=$("timer");
+    var endAt=snap.startAt+snap.durationMs;
+    if(ph=="countdown"){ov.className="";ov.textContent=Math.max(1,Math.ceil((snap.startAt-now)/1000))}
+    else if(ph=="racing"&&now-snap.startAt<800){ov.className="";ov.textContent="GO!"}
+    else if(ph=="grace"){ov.className="small";ov.textContent="衝線結算中..."}
+    else ov.className="hide";
+    if(ph=="racing"){tm.className="";tm.textContent=Math.max(0,Math.ceil((endAt-now)/1000))+" 秒"}else tm.className="hide";
+    if(ph!="countdown"&&ph!="racing"&&ph!="grace")return;
+    drawTrack(dt);
+  }
+  function drawTrack(dt){
+    var w=cv.clientWidth,h=cv.clientHeight,r=devicePixelRatio||1;
+    if(cv.width!=w*r||cv.height!=h*r){cv.width=w*r;cv.height=h*r}
+    cx.setTransform(r,0,0,r,0,0);cx.clearRect(0,0,w,h);
+    var ps=snap.players,n=ps.length,lanes=Math.max(1,Math.min(n,20)),lh=h/lanes;
+    var max=0;ps.forEach(function(p){if(p.total>max)max=p.total});
+    var scale=Math.max(20,max*1.15),x0=24,x1=w-90;
+    for(var i=0;i<lanes;i++){cx.fillStyle=i%2?"#0d8a46":"#0b7a3e";cx.fillRect(0,i*lh,w,lh)}
+    cx.fillStyle="#fff";cx.fillRect(x0-4,0,4,h);
+    cx.textAlign="center";cx.font="600 "+Math.max(11,Math.min(18,lh*.45))+"px system-ui";
+    var dot=Math.max(4,Math.min(12,lh*.3));
+    ps.forEach(function(p,i){
+      var ru=runners[p.id]||(runners[p.id]={x:0});
+      var target=p.total/scale;
+      ru.x+=(target-ru.x)*Math.min(1,dt*8);
+      var lane=i%lanes,stagger=Math.floor(i/lanes)/Math.ceil(n/lanes);
+      var x=x0+ru.x*(x1-x0),y=lane*lh+lh*(.35+.5*stagger);
+      cx.fillStyle="hsl("+(i*137%360)+",85%,60%)";
+      cx.beginPath();cx.arc(x,y,dot,0,7);cx.fill();
+      cx.fillStyle="#fff";cx.fillText(p.name,x,y-dot-3);
+    });
+  }
+  requestAnimationFrame(frame);
+
   function connect(){
-    var ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/host");
-    ws.onopen=function(){status.textContent=""};
-    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")render(m);else if(m.type=="warmup")pulse(m.id);else if(m.type=="urls")urls(m)};
+    ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/host");
+    ws.onopen=function(){status.textContent="";off=null};
+    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")onSnapshot(m);else if(m.type=="warmup")pulse(m.id);else if(m.type=="urls")urls(m)};
     ws.onclose=function(){status.textContent="與伺服器斷線，重新連線中…";setTimeout(connect,1000)};
   }
   connect();

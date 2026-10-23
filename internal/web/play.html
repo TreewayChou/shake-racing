@@ -16,6 +16,8 @@ button:disabled{opacity:.5}
 #warn{color:#ffcc00;font-size:18px;font-weight:700}
 #n{font-size:64px;font-weight:800;transition:transform .08s}
 #n.p{transform:scale(1.25)}
+#t{font-size:96px;font-weight:800;color:#ffcc00;min-height:0}
+#mode{font-size:16px;opacity:.8}
 .hide{display:none}
 </style>
 </head>
@@ -25,9 +27,11 @@ button:disabled{opacity:.5}
 <p><input id="name" maxlength="8" placeholder="輸入暱稱（1–8 字）" autocomplete="off"></p>
 <p><button id="go">準備</button></p>
 </div>
+<div id="t"></div>
 <div id="n" class="hide">0</div>
 <div id="msg"></div>
 <div id="warn"></div>
+<div id="mode"></div>
 <script>
 // K: shake-detector constants, injected by the server.
 var K=__K__;
@@ -40,8 +44,13 @@ function connect(name){
   ws.onopen=function(){send({type:"join",name:name,playerId:me||undefined})};
   ws.onmessage=function(e){
     var m=JSON.parse(e.data);
-    if(m.type=="welcome"){me=m.playerId;localStorage.setItem("pid",me);if(m.constants)K=m.constants;joined=1;$("form").className="hide";$("n").className="";say("已加入！搖一搖手機暖身，等待主持人開始…")}
+    if(m.type=="welcome"){me=m.playerId;localStorage.setItem("pid",me);if(m.constants)K=m.constants;joined=1;$("form").className="hide";$("n").className="";lobby()}
     else if(m.type=="error"){$("go").disabled=false;say(m.reason=="name"?"暱稱需為 1–8 個字":"發生錯誤");ws.close()}
+    else if(m.type=="ping")send({type:"pong",id:m.id,clientTs:Date.now()});
+    else if(m.type=="config"){cfg=m;if(R&&R.res)R=null;if(!R)lobby()}
+    else if(m.type=="countdown")begin(m);
+    else if(m.type=="end"&&R&&!R.res)say("時間到！結算中…");
+    else if(m.type=="result"&&R){R.res=1;R.lock=1;clearInterval(R.iv);$("t").textContent="";$("n").textContent=m.totalShakes;say("第 "+m.rank+" 名／共 "+m.players+" 人");vib([100,60,100])}
   };
   ws.onclose=function(){if(!$("go").disabled)return;joined=0;say("連線中斷，請重新整理")};
 }
@@ -65,10 +74,49 @@ function onMotion(e){
   else if(!armed&&v<T*K.rearm)armed=1;
 }
 function shake(){
-  count++;
-  var n=$("n");n.textContent=count;n.className="p";setTimeout(function(){n.className=""},80);
+  var n=$("n");
+  if(R){
+    // Racing: count only inside [start, start+duration) on this phone's clock.
+    if(!R.go||R.lock||el()>=R.D)return;
+    n.textContent=++R.total;
+  }else{
+    n.textContent=++count;
+    var now=Date.now();
+    if(joined&&now-lastWarm>=150){lastWarm=now;send({type:"warmup"})}
+  }
+  n.className="p";setTimeout(function(){n.className=""},80);
+}
+
+// Round. countdown.startAt is already on this phone's clock (the server
+// converts it using the measured clock offset), so Date.now() decides the
+// start; from then on elapsed time comes from the monotonic
+// performance.now(). Counting hard-locks at durationMs, and the cumulative
+// total is sent every 150 ms until the result arrives, so a lost packet
+// never loses shakes.
+var cfg=null,R=null;
+function vib(p){try{navigator.vibrate&&navigator.vibrate(p)}catch(_){}}
+function el(){return performance.now()-R.p0}
+function lobby(){
+  $("t").textContent="";$("n").textContent=count;
+  say("已加入！搖一搖手機暖身，等待主持人開始…");
+  if(cfg)$("mode").textContent="個人限時 "+cfg.durationMs/1000+" 秒";
+}
+function begin(m){
+  if(R)clearInterval(R.iv);
+  R={S:m.startAt,D:m.durationMs,total:0,go:0,lock:0,res:0,sent:0};
+  $("n").textContent=0;say("準備…");
+  R.iv=setInterval(loop,30);loop();
+}
+function loop(){
   var now=Date.now();
-  if(joined&&now-lastWarm>=150){lastWarm=now;send({type:"warmup"})}
+  if(!R.go){
+    if(now<R.S){$("t").textContent=Math.ceil((R.S-now)/1000);return}
+    R.go=1;R.p0=performance.now()-(now-R.S);vib(200);say("搖！用力搖！");
+  }
+  var e=el();
+  if(!R.lock&&e>=R.D){R.lock=1;vib([100,60,100]);say("時間到！結算中…")}
+  $("t").textContent=R.lock?"":Math.ceil((R.D-e)/1000);
+  if(e-R.sent>=150){R.sent=e;send({type:"progress",totalShakes:R.total,elapsedMs:Math.round(Math.min(e,R.D))})}
 }
 function noSensor(){warn("⚠️ 偵測不到動作感應器。請確認使用 HTTPS 連結開啟，或改用其他手機。")}
 function arm(){
