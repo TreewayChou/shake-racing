@@ -35,7 +35,9 @@ func (h *Harness) NowMs() int64 { return h.Clock.Now().UnixMilli() }
 // Config is the round configuration pushed to phones.
 type Config struct {
 	Mode       string `json:"mode"`
-	DurationMs int64  `json:"durationMs"`
+	DurationMs int64  `json:"durationMs"` // timed modes
+	Target     int    `json:"target"`     // race modes: shakes to finish
+	TimeCapMs  int64  `json:"timeCapMs"`  // individual race: longest a round may run
 }
 
 // ExpectConfig waits for the next config message.
@@ -79,8 +81,10 @@ func (p *Phone) SyncClock(n int, offset time.Duration) {
 
 // Countdown announces the round's absolute start moment.
 type Countdown struct {
-	StartAt    int64 `json:"startAt"` // on the receiving phone's own clock, Unix ms
-	DurationMs int64 `json:"durationMs"`
+	StartAt    int64 `json:"startAt"`    // on the receiving phone's own clock, Unix ms
+	DurationMs int64 `json:"durationMs"` // timed modes
+	Target     int   `json:"target"`     // race modes
+	TimeCapMs  int64 `json:"timeCapMs"`  // individual race
 }
 
 // ExpectCountdown waits for the next countdown message.
@@ -97,6 +101,13 @@ func (p *Phone) Progress(totalShakes int, elapsedMs int64) {
 	p.Send(map[string]any{"type": "progress", "totalShakes": totalShakes, "elapsedMs": elapsedMs})
 }
 
+// Finish sends the race finish report: the target total and the phone's
+// local elapsed time at the moment it was reached. It does not wait.
+func (p *Phone) Finish(totalShakes int, elapsedMs int64) {
+	p.t.Helper()
+	p.Send(map[string]any{"type": "progress", "totalShakes": totalShakes, "elapsedMs": elapsedMs, "finished": true})
+}
+
 // ExpectEnd waits for the time-up end message.
 func (p *Phone) ExpectEnd() {
 	p.t.Helper()
@@ -105,9 +116,11 @@ func (p *Phone) ExpectEnd() {
 
 // Result is a phone's final standing.
 type Result struct {
-	Rank        int `json:"rank"`
-	TotalShakes int `json:"totalShakes"`
-	Players     int `json:"players"`
+	Rank        int   `json:"rank"`
+	TotalShakes int   `json:"totalShakes"`
+	Players     int   `json:"players"`
+	Finished    bool  `json:"finished"`  // race: reached the target
+	ElapsedMs   int64 `json:"elapsedMs"` // race: the phone's finish time
 }
 
 // ExpectResult waits for the phone's result.
@@ -134,6 +147,13 @@ func (h *Host) SetConfig(fields map[string]any) {
 func (h *Host) Start() {
 	h.t.Helper()
 	h.Send(map[string]any{"type": "start"})
+	h.Echo()
+}
+
+// End presses 結束 and waits until it is handled.
+func (h *Host) End() {
+	h.t.Helper()
+	h.Send(map[string]any{"type": "end"})
 	h.Echo()
 }
 

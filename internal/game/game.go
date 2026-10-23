@@ -46,14 +46,25 @@ type Player struct {
 	ID    string
 	Name  string
 	Total int // shakes accepted this round
+
+	// Race modes: Finished once Total reaches the target, at phone-measured
+	// Finish time since the synced start.
+	Finished bool
+	Finish   time.Duration
 }
 
 // entry is the engine's own roster record.
 type entry struct {
 	Player
-	seq     int           // join order, the last tie-break
-	inRound bool          // takes part in the current round
-	reached time.Duration // phone-elapsed time when Total was reached
+	seq        int           // join order, the last tie-break
+	inRound    bool          // takes part in the current round
+	reached    time.Duration // phone-elapsed time when Total was reached
+	finishedAt time.Time     // server time the finish was recorded
+}
+
+// clearRound drops the player's progress in the last round.
+func (p *entry) clearRound() {
+	p.Total, p.Finished, p.Finish, p.reached, p.finishedAt = 0, false, 0, 0, time.Time{}
 }
 
 // Snapshot is a point-in-time view of the room. Taking one advances the

@@ -54,7 +54,9 @@ type resultMsg struct {
 	Type        string `json:"type"` // "result"
 	Rank        int    `json:"rank"`
 	TotalShakes int    `json:"totalShakes"`
-	Players     int    `json:"players"` // participants ranked
+	Players     int    `json:"players"`             // participants ranked
+	Finished    bool   `json:"finished,omitempty"`  // race: reached the target
+	ElapsedMs   int64  `json:"elapsedMs,omitempty"` // race: phone-measured finish time
 }
 
 // pingMsg is a heartbeat and clock-sync probe.
@@ -86,21 +88,36 @@ func newDetectorMsg(d game.Detector) detectorMsg {
 // configMsg is sent after welcome and whenever the host changes the
 // configuration.
 type configMsg struct {
-	Type       string `json:"type"` // "config"
-	Mode       string `json:"mode"`
-	DurationMs int64  `json:"durationMs,omitempty"`
+	Type string `json:"type"` // "config"
+	Mode string `json:"mode"`
+	modeOptions
+}
+
+// modeOptions are the options that apply to a mode: durationMs for timed
+// modes, target and timeCapMs for race.
+type modeOptions struct {
+	DurationMs int64 `json:"durationMs,omitempty"`
+	Target     int   `json:"target,omitempty"`
+	TimeCapMs  int64 `json:"timeCapMs,omitempty"`
+}
+
+func newModeOptions(c game.Config) modeOptions {
+	if c.Mode == game.IndividualRace {
+		return modeOptions{Target: c.Target, TimeCapMs: c.TimeCap.Milliseconds()}
+	}
+	return modeOptions{DurationMs: c.Duration.Milliseconds()}
 }
 
 func newConfigMsg(c game.Config) configMsg {
-	return configMsg{Type: "config", Mode: string(c.Mode), DurationMs: c.Duration.Milliseconds()}
+	return configMsg{Type: "config", Mode: string(c.Mode), modeOptions: newModeOptions(c)}
 }
 
 // countdownMsg announces the synced start moment, converted to the
-// receiving phone's own clock, and the round length.
+// receiving phone's own clock, and the round's mode options.
 type countdownMsg struct {
-	Type       string `json:"type"` // "countdown"
-	StartAt    int64  `json:"startAt"`
-	DurationMs int64  `json:"durationMs,omitempty"`
+	Type    string `json:"type"` // "countdown"
+	StartAt int64  `json:"startAt"`
+	modeOptions
 }
 
 type errorMsg struct {
@@ -115,6 +132,8 @@ type errorMsg struct {
 type setConfigMsg struct {
 	Mode       *string `json:"mode"`
 	DurationMs *int64  `json:"durationMs"`
+	Target     *int    `json:"target"`
+	TimeCapMs  *int64  `json:"timeCapMs"`
 }
 
 // Server -> host.
@@ -123,7 +142,9 @@ type snapshotMsg struct {
 	Type       string           `json:"type"` // "snapshot"
 	Phase      string           `json:"phase"`
 	Mode       string           `json:"mode"`
-	DurationMs int64            `json:"durationMs,omitempty"`
+	DurationMs int64            `json:"durationMs"` // every option, whatever the mode,
+	Target     int              `json:"target"`     // so the settings panel shows
+	TimeCapMs  int64            `json:"timeCapMs"`  // the host's picks
 	ServerNow  int64            `json:"serverNow"`
 	StartAt    int64            `json:"startAt,omitempty"` // server clock
 	EndAt      int64            `json:"endAt,omitempty"`   // racing end, server clock
@@ -151,4 +172,13 @@ type snapshotPlayer struct {
 	Name  string `json:"name"`
 	Total int    `json:"total"`
 	Rank  int    `json:"rank,omitempty"`
+
+	Finished  bool  `json:"finished,omitempty"`  // race: reached the target
+	ElapsedMs int64 `json:"elapsedMs,omitempty"` // race: phone-measured finish time
+}
+
+// withFinish adds p's race finish, if any, to sp.
+func (sp snapshotPlayer) withFinish(p game.Player) snapshotPlayer {
+	sp.Finished, sp.ElapsedMs = p.Finished, p.Finish.Milliseconds()
+	return sp
 }

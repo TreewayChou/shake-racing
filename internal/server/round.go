@@ -147,6 +147,12 @@ func (s *Server) hostMessage(typ string, data []byte) {
 		if m.DurationMs != nil {
 			c.Duration = time.Duration(*m.DurationMs) * time.Millisecond
 		}
+		if m.Target != nil {
+			c.Target = *m.Target
+		}
+		if m.TimeCapMs != nil {
+			c.TimeCap = time.Duration(*m.TimeCapMs) * time.Millisecond
+		}
 		if s.engine.SetConfig(c) != nil {
 			return
 		}
@@ -158,11 +164,13 @@ func (s *Server) hostMessage(typ string, data []byte) {
 		}
 		for ph := range s.phones {
 			ph.c.send(mustJSON(countdownMsg{
-				Type:       "countdown",
-				StartAt:    ph.toLocal(r.StartAt),
-				DurationMs: r.Config.Duration.Milliseconds(),
+				Type:        "countdown",
+				StartAt:     ph.toLocal(r.StartAt),
+				modeOptions: newModeOptions(r.Config),
 			}))
 		}
+	case "end":
+		s.engine.End()
 	case "again":
 		if s.engine.Again() == nil {
 			s.sendPhonesLocked(mustJSON(newConfigMsg(s.engine.Config())))
@@ -190,7 +198,10 @@ func (s *Server) dispatchLocked() {
 			}
 			for ph := range s.phones {
 				if st, ok := byID[ph.id]; ok {
-					ph.c.send(mustJSON(resultMsg{Type: "result", Rank: st.Rank, TotalShakes: st.Total, Players: len(ev.Standings)}))
+					ph.c.send(mustJSON(resultMsg{
+						Type: "result", Rank: st.Rank, TotalShakes: st.Total, Players: len(ev.Standings),
+						Finished: st.Finished, ElapsedMs: st.Finish.Milliseconds(),
+					}))
 				}
 			}
 		}
@@ -206,6 +217,8 @@ func (s *Server) snapshotLocked() []byte {
 		Phase:      string(snap.Phase),
 		Mode:       string(snap.Config.Mode),
 		DurationMs: snap.Config.Duration.Milliseconds(),
+		Target:     snap.Config.Target,
+		TimeCapMs:  snap.Config.TimeCap.Milliseconds(),
 		ServerNow:  snap.At.UnixMilli(),
 		GraceMs:    game.Grace.Milliseconds(),
 		Players:    make([]snapshotPlayer, len(snap.Players)),
@@ -218,10 +231,10 @@ func (s *Server) snapshotLocked() []byte {
 		msg.EndAt = snap.Round.EndAt.UnixMilli()
 	}
 	for i, p := range snap.Players {
-		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name, Total: p.Total}
+		msg.Players[i] = snapshotPlayer{ID: p.ID, Name: p.Name, Total: p.Total}.withFinish(p)
 	}
 	for i, st := range snap.Top {
-		msg.Top[i] = snapshotPlayer{ID: st.ID, Name: st.Name, Total: st.Total, Rank: st.Rank}
+		msg.Top[i] = snapshotPlayer{ID: st.ID, Name: st.Name, Total: st.Total, Rank: st.Rank}.withFinish(st.Player)
 	}
 	return mustJSON(msg)
 }
