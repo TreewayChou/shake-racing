@@ -138,6 +138,14 @@ type warmupMsg struct {
 	ID   string `json:"id"`
 }
 
+// urlsMsg tells hosts where players join: full /play URLs.
+type urlsMsg struct {
+	Type       string `json:"type"` // "urls"
+	Public     string `json:"public"`
+	LAN        string `json:"lan"`
+	TunnelMode string `json:"tunnelMode"`
+}
+
 type snapshotPlayer struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`

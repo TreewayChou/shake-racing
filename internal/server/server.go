@@ -36,11 +36,13 @@ type Server struct {
 
 	clock clock.Clock
 
-	mu     sync.Mutex
-	engine *game.Engine
-	hosts  map[*conn]struct{}
+	mu      sync.Mutex
+	engine  *game.Engine
+	hosts   map[*conn]struct{}
 	phones  map[*phone]struct{} // joined phones
 	pingSeq int64
+	urls    []byte // current urls message; nil until SetURLs
+	qr      []byte // PNG of the join URL; nil until one is known
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -64,6 +66,7 @@ func New(opts Options) *Server {
 	s.mux = http.NewServeMux()
 	s.mux.Handle("GET /play", page(playPage(game.DefaultDetector)))
 	s.mux.Handle("GET /host", hostOnly(page(web.Host)))
+	s.mux.HandleFunc("GET /qr.png", s.serveQR)
 	s.mux.HandleFunc("GET /ws/play", s.servePhone)
 	s.mux.Handle("GET /ws/host", hostOnly(http.HandlerFunc(s.serveHost)))
 	s.mux.Handle("GET /{$}", http.RedirectHandler("/play", http.StatusFound))
@@ -190,6 +193,7 @@ func (s *Server) serveHost(w http.ResponseWriter, r *http.Request) {
 	defer c.close()
 	s.mu.Lock()
 	s.hosts[c] = struct{}{}
+	c.send(s.urlsLocked())
 	c.send(s.snapshotLocked())
 	s.dispatchLocked()
 	s.mu.Unlock()

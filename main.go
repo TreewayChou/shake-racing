@@ -62,20 +62,19 @@ func run(cfg config) error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", cfg.Port))
+	ln, err := net.Listen("tcp", listenAddr(cfg))
 	if err != nil {
 		return err
 	}
 	srv := server.New(server.Options{})
 	hs := &http.Server{Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 
-	// Tunnel arrives in a later milestone; until then the server runs LAN-only.
 	log.Printf("host screen: http://localhost:%d/host", cfg.Port)
-	if cfg.PublicURL != "" {
-		log.Printf("players:     %s/play", cfg.PublicURL)
-	}
-	for _, ip := range lanIPs() {
-		log.Printf("players (LAN): http://%s/play", net.JoinHostPort(ip, fmt.Sprint(cfg.Port)))
+	tun := publishJoinURLs(cfg, srv, func() string { return serveLAN(hs, cfg.Port) })
+	if !wantsTunnel(cfg) {
+		for _, ip := range lanIPs() {
+			log.Printf("players (LAN): http://%s/play", net.JoinHostPort(ip, fmt.Sprint(cfg.Port)))
+		}
 	}
 
 	errc := make(chan error, 1)
@@ -91,11 +90,13 @@ func run(cfg config) error {
 
 	reason, serveErr := waitForStop(ctx, browserExited, errc)
 	if serveErr != nil {
+		shutdown(tun) // never leave cloudflared orphaned
 		return serveErr
 	}
 	log.Printf("shutting down (%s)", reason)
-	// Closed in order: kiosk window, HTTP server, game server.
+	// Closed in order: kiosk window, tunnel, HTTP server, game server.
 	closers := []io.Closer{
+		tun,
 		closerFunc(func() error {
 			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -129,6 +130,28 @@ func openKiosk(port int) *kiosk.Browser {
 	}
 	log.Printf("kiosk: %s", path)
 	return b
+}
+
+// serveLAN starts hs on each LAN address as a fallback when the server was
+// bound to loopback only, and returns the first LAN base URL ("" if none).
+// It binds each address explicitly because a wildcard bind would clash with
+// the existing loopback listener on Linux.
+func serveLAN(hs *http.Server, port int) string {
+	var first string
+	for _, ip := range lanIPs() {
+		ln, err := net.Listen("tcp", net.JoinHostPort(ip, fmt.Sprint(port)))
+		if err != nil {
+			log.Printf("LAN fallback: %v", err)
+			continue
+		}
+		go hs.Serve(ln)
+		url := "http://" + ln.Addr().String()
+		log.Printf("players (LAN): %s/play", url)
+		if first == "" {
+			first = url
+		}
+	}
+	return first
 }
 
 // lanIPs returns this machine's non-loopback IPv4 addresses.
