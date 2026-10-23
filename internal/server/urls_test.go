@@ -32,6 +32,19 @@ func TestHostReceivesURLsOnConnectAndOnChange(t *testing.T) {
 	}
 }
 
+func TestHostIsToldWhenTheTunnelIsLost(t *testing.T) {
+	h := servertest.Start(t)
+	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", Mode: server.ModeTunnel})
+	host := h.Host()
+	host.ExpectURLs()
+
+	h.Server.SetURLs(server.URLs{Public: "https://abc-def.trycloudflare.com", Mode: server.ModeLost})
+	got := host.ExpectURLs()
+	if want := (servertest.URLs{Public: "https://abc-def.trycloudflare.com/play", TunnelMode: "lost"}); got != want {
+		t.Errorf("urls after the tunnel is lost = %+v, want %+v", got, want)
+	}
+}
+
 // qrOf is the PNG the QR endpoint should serve for a join URL.
 func qrOf(t *testing.T, url string) []byte {
 	t.Helper()

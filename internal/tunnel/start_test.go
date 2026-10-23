@@ -32,6 +32,11 @@ func fakeCloudflared(mode string) int {
 		log, _ := os.ReadFile("testdata/quick-tunnel.log")
 		os.Stderr.Write(log)
 		select {} // run until killed
+	case "drop": // up, then the connection dies
+		log, _ := os.ReadFile("testdata/quick-tunnel.log")
+		os.Stderr.Write(log)
+		time.Sleep(200 * time.Millisecond)
+		return 1
 	case "fail":
 		log, _ := os.ReadFile("testdata/quick-tunnel-failed.log")
 		os.Stderr.Write(log)
@@ -87,7 +92,15 @@ func TestStartFailsWhenCloudflaredExitsWithoutURL(t *testing.T) {
 	}
 }
 
-func launchFake(t *testing.T, mode string) (*tunnel.Background, chan string, chan error) {
+// fakeLaunch is a Launch of the fake cloudflared and what it reported.
+type fakeLaunch struct {
+	bg   *tunnel.Background
+	urls chan string
+	errs chan error
+	lost chan struct{}
+}
+
+func launchFake(t *testing.T, mode string) fakeLaunch {
 	t.Helper()
 	t.Setenv("FAKE_CLOUDFLARED", mode)
 	exe, err := os.Executable()
@@ -95,43 +108,63 @@ func launchFake(t *testing.T, mode string) (*tunnel.Background, chan string, cha
 		t.Fatal(err)
 	}
 	loc := tunnel.Locator{LookPath: func(string) (string, error) { return exe, nil }}
-	urls, errs := make(chan string, 1), make(chan error, 1)
-	bg := tunnel.Launch(loc, "http://localhost:3000", 10*time.Second, func(url string, err error) {
+	f := fakeLaunch{urls: make(chan string, 1), errs: make(chan error, 1), lost: make(chan struct{}, 1)}
+	f.bg = tunnel.Launch(loc, "http://localhost:3000", 10*time.Second, func(url string, err error) {
 		if err != nil {
-			errs <- err
+			f.errs <- err
 		} else {
-			urls <- url
+			f.urls <- url
 		}
-	})
-	return bg, urls, errs
+	}, func() { f.lost <- struct{}{} })
+	return f
 }
 
 func TestLaunchReportsURLAndCloseStopsCloudflared(t *testing.T) {
-	bg, urls, errs := launchFake(t, "ok")
+	f := launchFake(t, "ok")
 	select {
-	case u := <-urls:
+	case u := <-f.urls:
 		if want := "https://boundary-metals-painted-totally.trycloudflare.com"; u != want {
 			t.Errorf("reported %q, want %q", u, want)
 		}
-	case err := <-errs:
+	case err := <-f.errs:
 		t.Fatal(err)
 	}
-	var c io.Closer = bg
+	var c io.Closer = f.bg
 	if err := c.Close(); err != nil {
 		t.Fatal(err)
 	}
 	select {
-	case <-bg.Tunnel().Done():
+	case <-f.bg.Tunnel().Done():
 	default:
 		t.Fatal("Close returned while cloudflared still running")
+	}
+	select {
+	case <-f.lost:
+		t.Error("stopping the tunnel on Close reported it lost")
+	default:
 	}
 }
 
 func TestLaunchReportsFailure(t *testing.T) {
-	bg, _, errs := launchFake(t, "fail")
-	defer bg.Close()
-	if err := <-errs; err == nil {
+	f := launchFake(t, "fail")
+	defer f.bg.Close()
+	if err := <-f.errs; err == nil {
 		t.Fatal("want failure report")
+	}
+}
+
+func TestLaunchReportsTunnelLostWhenCloudflaredExitsAfterTheURL(t *testing.T) {
+	f := launchFake(t, "drop")
+	defer f.bg.Close()
+	select {
+	case <-f.urls:
+	case err := <-f.errs:
+		t.Fatal(err)
+	}
+	select {
+	case <-f.lost:
+	case <-time.After(10 * time.Second):
+		t.Fatal("cloudflared exited but the tunnel was not reported lost")
 	}
 }
 

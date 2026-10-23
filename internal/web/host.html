@@ -146,14 +146,19 @@ button:disabled{opacity:.4;cursor:default}
   }
   // urls shows the join QR code and URL, with a warning when phones would
   // load the page over plain HTTP and so get no G-Sensor access.
-  var qr=$("qr"),joinurl=$("joinurl"),warn=$("warn");
+  var qr=$("qr"),joinurl=$("joinurl"),warn=$("warn"),disconnected=false,tunnelLost=false;
+  function showStatus(){status.textContent=disconnected?"與伺服器斷線，重新連線中…":tunnelLost?"⚠ Cloudflare 通道中斷，請重新啟動程式":""}
   function urls(m){
     var u=m.public||m.lan;
     joinurl.textContent=u||(m.tunnelMode=="pending"?"建立公開網址中…":"找不到可用網址");
     if(u){qr.src="/qr.png?u="+encodeURIComponent(u);qr.hidden=false}else qr.hidden=true;
     warn.textContent=m.tunnelMode=="pending"?(u?"公開網址建立中，暫時顯示區域網路網址…":""):
       m.tunnelMode=="failed"?"⚠ 無法建立 Cloudflare 通道，改用區域網路網址：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":
-      m.tunnelMode=="lan"?"⚠ 區域網路模式：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":"";
+      m.tunnelMode=="lan"?"⚠ 區域網路模式：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":
+      m.tunnelMode=="lost"?"⚠ Cloudflare 通道中斷，請重新啟動程式":"";
+    // The tunnel can drop mid-round, when the lobby (and its warning) is
+    // hidden: the status line shows it on every screen.
+    tunnelLost=m.tunnelMode=="lost";showStatus();
   }
   // pulse flashes a player's card on a lobby warm-up shake.
   function pulse(id){
@@ -368,9 +373,9 @@ button:disabled{opacity:.4;cursor:default}
 
   function connect(){
     ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/host");
-    ws.onopen=function(){status.textContent="";off=null};
+    ws.onopen=function(){disconnected=false;showStatus();off=null};
     ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")onSnapshot(m);else if(m.type=="warmup")pulse(m.id);else if(m.type=="urls")urls(m)};
-    ws.onclose=function(){status.textContent="與伺服器斷線，重新連線中…";setTimeout(connect,1000)};
+    ws.onclose=function(){disconnected=true;showStatus();setTimeout(connect,1000)};
   }
   connect();
 })();

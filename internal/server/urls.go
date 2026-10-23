@@ -18,6 +18,7 @@ const (
 	ModeCustom  TunnelMode = "custom"  // public URL came from -public-url
 	ModeLAN     TunnelMode = "lan"     // -no-tunnel: LAN only, by choice
 	ModeFailed  TunnelMode = "failed"  // tunnel failed: LAN fallback
+	ModeLost    TunnelMode = "lost"    // tunnel was up, then cloudflared exited: warn only
 )
 
 // URLs are the base URLs (scheme://host[:port], no path) players can reach.

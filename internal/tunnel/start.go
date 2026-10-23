@@ -66,6 +66,11 @@ func Start(ctx context.Context, bin, localURL string) (*Tunnel, error) {
 	case t.url = <-found:
 		return t, nil
 	case <-t.done:
+		select {
+		case t.url = <-found: // the URL came just before cloudflared exited
+			return t, nil
+		default:
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		return nil, fmt.Errorf("%w: %s", ErrNoURL, strings.Join(tail, " | "))

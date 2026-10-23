@@ -64,14 +64,21 @@ func publishJoinURLs(cfg config, srv *server.Server, serveLAN func() string) io.
 		return nil
 	}
 	log.Print("tunnel: starting Cloudflare quick tunnel…")
+	var public string // set by the report, read by lost: same goroutine
 	return tunnel.Launch(tunnel.Locator{}, fmt.Sprintf("http://127.0.0.1:%d", cfg.Port), tunnelTimeout,
-		func(public string, err error) {
+		func(url string, err error) {
 			if err != nil {
 				log.Printf("tunnel: %v; falling back to LAN (phones need HTTPS for the G-Sensor)", err)
 				srv.SetURLs(server.URLs{LAN: serveLAN(), Mode: server.ModeFailed})
 				return
 			}
+			public = url
 			log.Printf("players:     %s/play", public)
 			srv.SetURLs(server.URLs{Public: public, Mode: server.ModeTunnel})
+		},
+		func() {
+			// Mid-event there is no safe switch to another URL: warn only.
+			log.Print("tunnel: cloudflared exited; restart the program to get a new public URL")
+			srv.SetURLs(server.URLs{Public: public, Mode: server.ModeLost})
 		})
 }
