@@ -36,7 +36,9 @@ func (e *Engine) uniqueName(name string) string {
 // view is p as seen from outside at now.
 func (e *Engine) view(p *entry, now time.Time) Player {
 	v := p.Player
-	v.Waiting = !p.inRound && e.phase != PhaseLobby
+	// Only a round under way parks a newcomer; one who joins during the
+	// results is a lobby player for the next round.
+	v.Waiting = !p.inRound && (e.phase == PhaseCountdown || e.phase == PhaseRacing || e.phase == PhaseGrace)
 	v.Offline = now.Sub(p.lastSeen) >= OfflineAfter
 	return v
 }

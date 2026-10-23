@@ -66,8 +66,11 @@ type Standing struct {
 // with Events after every command.
 type Event interface{ event() }
 
-// RoundEnded: racing is over and the grace period has begun.
-type RoundEnded struct{}
+// RoundEnded: racing is over and the grace period has begun. Only the
+// participants are told; a late joiner keeps waiting for the next round.
+type RoundEnded struct {
+	Participants []string // ids of the players taking part
+}
 
 // RoundResults: the round is ranked. Standings cover every participant.
 // Teams are the final team scores in team modes, nil otherwise.
@@ -159,10 +162,19 @@ func (e *Engine) End() error {
 	if e.phase != PhaseRacing {
 		return ErrWrongPhase
 	}
-	e.round.EndAt = now
-	e.phase = PhaseGrace
-	e.events = append(e.events, RoundEnded{})
+	e.endRacing(now)
 	return nil
+}
+
+// endRacing ends racing at the given moment and starts the grace period.
+func (e *Engine) endRacing(at time.Time) {
+	e.round.EndAt = at
+	e.phase = PhaseGrace
+	var ids []string
+	for _, p := range e.participants() {
+		ids = append(ids, p.ID)
+	}
+	e.events = append(e.events, RoundEnded{Participants: ids})
 }
 
 // Again returns from results to the lobby with the same roster.
@@ -244,9 +256,7 @@ func (e *Engine) sync() (now time.Time) {
 			if !ok {
 				return now
 			}
-			e.round.EndAt = end
-			e.phase = PhaseGrace
-			e.events = append(e.events, RoundEnded{})
+			e.endRacing(end)
 		case PhaseGrace:
 			if now.Before(e.round.EndAt.Add(Grace)) {
 				return now

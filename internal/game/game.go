@@ -120,7 +120,9 @@ func (e *Engine) find(id string) *entry {
 // If id names a player already in the roster, that player reconnects
 // instead: identity, name and score are kept and name is ignored.
 //
-// A new player who joins once a round has started waits for the next one.
+// A new player who joins while a round is under way (countdown to grace)
+// waits for the next one; one who joins during the results is a lobby
+// player for the next round.
 // Join fails with ErrFull when the roster holds MaxPlayers. A nickname
 // already taken gets a "#2"-style suffix.
 func (e *Engine) Join(name, id string) (Player, error) {

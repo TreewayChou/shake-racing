@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"slices"
 	"time"
 
 	"racing/internal/clock"
@@ -212,10 +213,9 @@ func (s *Server) dispatchLocked() {
 	for _, ev := range s.engine.Events() {
 		switch ev := ev.(type) {
 		case game.RoundEnded:
-			// Only participants: a late joiner keeps waiting for the next round.
 			b := mustJSON(endMsg{Type: "end"})
 			for ph := range s.phones {
-				if p, ok := s.engine.Player(ph.id); ok && !p.Waiting {
+				if slices.Contains(ev.Participants, ph.id) {
 					ph.c.send(b)
 				}
 			}

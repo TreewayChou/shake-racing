@@ -83,6 +83,29 @@ func TestLateJoinerGetsNoEndOrResult(t *testing.T) {
 	}
 }
 
+func TestJoinDuringResultsIsALobbyPlayerForTheNextRound(t *testing.T) {
+	r := startRace(t, 15000, "小明")
+	r.advanceTo(15000 + graceMs)
+	r.phones[0].ExpectResult()
+
+	late := r.h.Phone()
+	id := late.Join("遲到").PlayerID
+	late.Send(map[string]any{"type": "echo", "id": -1})
+	for m := late.Recv(); m.Type != "echo"; m = late.Recv() {
+		if m.Type == "wait" || m.Type == "result" {
+			t.Fatalf("results-phase joiner got %s: %s", m.Type, m.Raw)
+		}
+	}
+	if p, _ := r.host.NextSnapshot(r.h).Player(id); p.Waiting {
+		t.Errorf("results-phase joiner %+v, want not waiting", p)
+	}
+
+	r.host.Again()
+	late.ExpectConfig()
+	r.host.Start()
+	late.ExpectCountdown()
+}
+
 func TestRoomCapsAt100(t *testing.T) {
 	h := servertest.Start(t)
 	for i := range 100 {
