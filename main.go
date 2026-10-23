@@ -69,11 +69,8 @@ func run(cfg config) error {
 	srv := server.New(server.Options{})
 	hs := &http.Server{Handler: srv, ReadHeaderTimeout: 10 * time.Second}
 
-	// Tunnel arrives in a later milestone; until then the server runs LAN-only.
 	log.Printf("host screen: http://localhost:%d/host", cfg.Port)
-	if cfg.PublicURL != "" {
-		log.Printf("players:     %s/play", cfg.PublicURL)
-	}
+	tun := publishJoinURLs(cfg, srv)
 	for _, ip := range lanIPs() {
 		log.Printf("players (LAN): http://%s/play", net.JoinHostPort(ip, fmt.Sprint(cfg.Port)))
 	}
@@ -91,11 +88,13 @@ func run(cfg config) error {
 
 	reason, serveErr := waitForStop(ctx, browserExited, errc)
 	if serveErr != nil {
+		shutdown(tun) // never leave cloudflared orphaned
 		return serveErr
 	}
 	log.Printf("shutting down (%s)", reason)
-	// Closed in order: kiosk window, HTTP server, game server.
+	// Closed in order: kiosk window, tunnel, HTTP server, game server.
 	closers := []io.Closer{
+		tun,
 		closerFunc(func() error {
 			shutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()

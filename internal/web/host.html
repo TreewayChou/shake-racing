@@ -14,12 +14,19 @@ h1{margin:0;font-size:48px}
 #cards{display:flex;flex-wrap:wrap;gap:12px;padding:16px 40px}
 .card{background:#2a3aa8;border-radius:12px;padding:12px 20px;font-size:24px;font-weight:600}
 .card.pulse{animation:pulse .35s ease-out}
+#join{display:flex;align-items:center;gap:32px;margin:0 40px;padding:24px;background:#fff;color:#10164a;border-radius:20px}
+#qr{width:280px;height:280px;flex:none}
+#qr[hidden]{display:none}
+#joinurl{font-size:40px;font-weight:700;word-break:break-all}
+#joinhint{font-size:24px;margin-bottom:8px}
+#warn{margin-top:12px;font-size:22px;font-weight:600;color:#c62828}
 @keyframes pulse{0%{transform:scale(1.18);background:#ffcc00;color:#222}100%{transform:scale(1)}}
 </style>
 </head>
 <body>
 <header><h1>🏁 百人搖搖競速</h1><div id="count">0 人已加入</div></header>
 <div id="status"></div>
+<section id="join"><img id="qr" alt="加入 QR Code" hidden><div><div id="joinhint">掃描 QR Code 加入遊戲</div><div id="joinurl">取得網址中…</div><div id="warn"></div></div></section>
 <div id="cards"></div>
 <script>
 (function(){
@@ -36,6 +43,17 @@ h1{margin:0;font-size:48px}
       cards.appendChild(d);
     });
   }
+  // urls shows the join QR code and URL, with a warning when phones would
+  // load the page over plain HTTP and so get no G-Sensor access.
+  var qr=document.getElementById("qr"),joinurl=document.getElementById("joinurl"),warn=document.getElementById("warn");
+  function urls(m){
+    var u=m.public||m.lan;
+    joinurl.textContent=u||(m.tunnelMode=="pending"?"建立公開網址中…":"找不到可用網址");
+    if(u){qr.src="/qr.png?u="+encodeURIComponent(u);qr.hidden=false}else qr.hidden=true;
+    warn.textContent=m.tunnelMode=="pending"?"公開網址建立中，暫時顯示區域網路網址…":
+      m.tunnelMode=="failed"?"⚠ 無法建立 Cloudflare 通道，改用區域網路網址：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":
+      m.tunnelMode=="lan"?"⚠ 區域網路模式：手機需 HTTPS 才能使用 G-Sensor，可能無法偵測搖晃":"";
+  }
   // pulse flashes a player's card on a lobby warm-up shake.
   function pulse(id){
     var d=cards.querySelector('[data-id="'+id+'"]');
@@ -45,7 +63,7 @@ h1{margin:0;font-size:48px}
   function connect(){
     var ws=new WebSocket((location.protocol=="https:"?"wss://":"ws://")+location.host+"/ws/host");
     ws.onopen=function(){status.textContent=""};
-    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")render(m);else if(m.type=="warmup")pulse(m.id)};
+    ws.onmessage=function(e){var m=JSON.parse(e.data);if(m.type=="snapshot")render(m);else if(m.type=="warmup")pulse(m.id);else if(m.type=="urls")urls(m)};
     ws.onclose=function(){status.textContent="與伺服器斷線，重新連線中…";setTimeout(connect,1000)};
   }
   connect();

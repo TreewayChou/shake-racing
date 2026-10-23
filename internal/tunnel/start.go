@@ -90,3 +90,9 @@ func (t *Tunnel) Stop() {
 	})
 	<-t.done
 }
+
+// Close is Stop, as an io.Closer.
+func (t *Tunnel) Close() error {
+	t.Stop()
+	return nil
+}

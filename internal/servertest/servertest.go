@@ -230,6 +230,22 @@ func (h *Host) ExpectWarmup() string {
 	return w.ID
 }
 
+// URLs is the host's urls{public, lan, tunnelMode} message: the /play URLs
+// players can join at, and how the public one was obtained.
+type URLs struct {
+	Public     string `json:"public"`
+	LAN        string `json:"lan"`
+	TunnelMode string `json:"tunnelMode"`
+}
+
+// ExpectURLs waits for the next urls message, skipping others.
+func (h *Host) ExpectURLs() URLs {
+	h.t.Helper()
+	var u URLs
+	h.Expect("urls").Decode(h.t, &u)
+	return u
+}
+
 // ServeFrom sends a GET for path straight to the server's handler as if it
 // came from remoteAddr ("ip:port"), which a loopback listener cannot fake.
 func (h *Harness) ServeFrom(remoteAddr, path string, header http.Header) *httptest.ResponseRecorder {

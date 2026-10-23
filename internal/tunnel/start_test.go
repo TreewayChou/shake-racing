@@ -3,6 +3,7 @@ package tunnel_test
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 	"testing"
@@ -83,6 +84,54 @@ func TestStartFailsWhenCloudflaredExitsWithoutURL(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "api.trycloudflare.com") {
 		t.Errorf("error %q does not carry cloudflared's last output", err)
+	}
+}
+
+func launchFake(t *testing.T, mode string) (*tunnel.Background, chan string, chan error) {
+	t.Helper()
+	t.Setenv("FAKE_CLOUDFLARED", mode)
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	loc := tunnel.Locator{LookPath: func(string) (string, error) { return exe, nil }}
+	urls, errs := make(chan string, 1), make(chan error, 1)
+	bg := tunnel.Launch(loc, "http://localhost:3000", 10*time.Second, func(url string, err error) {
+		if err != nil {
+			errs <- err
+		} else {
+			urls <- url
+		}
+	})
+	return bg, urls, errs
+}
+
+func TestLaunchReportsURLAndCloseStopsCloudflared(t *testing.T) {
+	bg, urls, errs := launchFake(t, "ok")
+	select {
+	case u := <-urls:
+		if want := "https://boundary-metals-painted-totally.trycloudflare.com"; u != want {
+			t.Errorf("reported %q, want %q", u, want)
+		}
+	case err := <-errs:
+		t.Fatal(err)
+	}
+	var c io.Closer = bg
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-bg.Tunnel().Done():
+	default:
+		t.Fatal("Close returned while cloudflared still running")
+	}
+}
+
+func TestLaunchReportsFailure(t *testing.T) {
+	bg, _, errs := launchFake(t, "fail")
+	defer bg.Close()
+	if err := <-errs; err == nil {
+		t.Fatal("want failure report")
 	}
 }
 
